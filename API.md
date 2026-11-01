@@ -51,8 +51,8 @@ All errors have the same shape:
 ### `GET /models` (no auth needed)
 Only models whose provider is configured on the server are listed.
 ```json
-{ "default": "nova-fast",
-  "models": [ { "id": "nova-fast", "name": "Nova Fast", "description": "..." }, ... ] }
+{ "default": "nova-smart",
+  "models": [ { "id": "nova-smart", "name": "Nova Smart", "description": "..." }, ... ] }
 ```
 
 ### `GET /me`
@@ -70,7 +70,9 @@ Built-in and public personas, plus your own.
 ```json
 { "personas": [ { "id": "uuid", "name": "Elena", "tagline": "...", "avatar_url": "/avatars/elena.webp",
                   "avatar_emoji": "📚", "visibility": "public", "is_romantic": true, "is_builtin": true,
-                  "is_mine": false, "bio": "...", "role": "slow-burn romantic interest" } ] }
+                  "is_mine": false, "bio": "...", "role": "slow-burn romantic interest",
+                  "age": 29, "pronouns": "she/her", "interests": ["old poetry", "rainy mornings"],
+                  "multi_bubble": true } ] }
 ```
 Relative `avatar_url`s are on the same host as the API (e.g. `https://<your-app>.vercel.app/avatars/elena.webp`).
 
