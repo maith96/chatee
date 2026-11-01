@@ -90,7 +90,7 @@ function describeDatabaseError(err: unknown): string | null {
     return "Database tables are out of date. Re-run supabase/schema.sql in the Supabase SQL Editor.";
   }
   if (code === "42501") {
-    return "The database refused access (missing table permissions or policies). Re-run supabase/schema.sql in the Supabase SQL Editor.";
+    return `The database refused access (missing table permissions or policies): ${message}. Re-run supabase/schema.sql in the Supabase SQL Editor.`;
   }
   if (code === "23503") {
     return "Your account isn't fully set up in the database. Sign out and sign in again.";
