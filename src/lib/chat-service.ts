@@ -112,12 +112,6 @@ type NewMessage = {
   created_at?: string;
 };
 
-async function insertMessage(db: SupabaseClient, row: NewMessage) {
-  const { data, error } = await db.from("messages").insert(row).select(MESSAGE_FIELDS).single();
-  if (error) throw error;
-  return data as Message;
-}
-
 /** Saves several bubbles at once, 1ms apart so they keep their order. */
 export async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
   const start = Date.now();
@@ -168,6 +162,7 @@ export function systemPromptFor(
     timezone: opts.timezone,
     minutesSinceLastUserMessage,
     stage: stageFor(state?.relationship ?? null),
+    turn: history.filter((m) => m.role === "user").length,
     // Dated, so the persona can tell "Friday" was upcoming vs. already past.
     memories: state?.memories.user.map((m) => `${m.content} (noted ${noteDate(m.created_at, opts.timezone)})`),
     selfFacts: state?.memories.self.map((m) => m.content),
@@ -196,7 +191,7 @@ export async function isRateLimited(db: SupabaseClient) {
  */
 export async function startReply(
   db: SupabaseClient,
-  opts: { conversation: Conversation; content: string; model?: ModelId; timezone?: string; abortSignal?: AbortSignal },
+  opts: { conversation: Conversation; content: string | string[]; model?: ModelId; timezone?: string; abortSignal?: AbortSignal },
 ) {
   const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
   const personaId = opts.conversation.persona_id;
@@ -206,20 +201,28 @@ export async function startReply(
     personaId ? loadPersonaState(db, personaId) : Promise.resolve(null),
   ]);
   // Computed before the new message is saved, so "time since last message" is the real gap.
-  const instructions = systemPromptFor(persona, state, history, { latest: opts.content, timezone: opts.timezone });
+  const latest = Array.isArray(opts.content) ? opts.content.join("\n") : opts.content;
+  const instructions = systemPromptFor(persona, state, history, { latest, timezone: opts.timezone });
 
-  // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
-  const last = history.at(-1);
-  const isRetry = last?.role === "user" && last.content === opts.content;
-  if (isRetry) history.pop();
-  const userMessage = isRetry
-    ? last
-    : await insertMessage(db, { conversation_id: opts.conversation.id, role: "user", content: opts.content });
-  if (persona && !isRetry) await bumpRelationship(db, persona.id);
+  // Several texts sent in quick succession arrive together and are saved as separate bubbles.
+  const contents = Array.isArray(opts.content) ? opts.content : [opts.content];
+
+  // Retry-safe: if the trailing saved user messages are exactly these texts (their reply failed), reuse them.
+  let start = history.length;
+  while (start > 0 && history[start - 1].role === "user") start--;
+  const trailing = history.slice(start);
+  const isRetry = trailing.length === contents.length && trailing.every((m, i) => m.content === contents[i]);
+  if (isRetry) history.splice(start);
+  const userMessages = isRetry
+    ? trailing
+    : await insertMessages(db, contents.map((content) => ({ conversation_id: opts.conversation.id, role: "user" as const, content })));
+  const userMessage = userMessages.at(-1)!;
+  // Count each text towards the relationship (they were separate messages).
+  if (persona && !isRetry) for (let i = 0; i < contents.length; i++) await bumpRelationship(db, persona.id);
 
   // Name the chat after its first message (free: no extra model call).
   if (history.length === 0 && opts.conversation.title === DEFAULT_TITLE) {
-    const title = opts.content.replace(/\s+/g, " ").trim().slice(0, 60);
+    const title = contents[0].replace(/\s+/g, " ").trim().slice(0, 60);
     await updateConversation(db, opts.conversation.id, { title: title || DEFAULT_TITLE });
   }
   if (model.id !== opts.conversation.model) {
@@ -234,7 +237,7 @@ export async function startReply(
     model: languageModel,
     providerOptions,
     instructions,
-    messages: toModelMessages([...history.slice(-HISTORY_LIMIT), userMessage]),
+    messages: toModelMessages([...history.slice(-HISTORY_LIMIT), ...userMessages]),
     abortSignal: opts.abortSignal,
     onEnd: async ({ text }) => {
       try {
@@ -271,13 +274,13 @@ export async function startReply(
     const bubbles = await saved;
     if (!bubbles.length) return;
     try {
-      await extractMemories(db, persona, opts.content, bubbles.map((b) => b.content).join("\n"), state.memories);
+      await extractMemories(db, persona, contents.join("\n"), bubbles.map((b) => b.content).join("\n"), state.memories);
     } catch (err) {
       console.error("Memory extraction failed", err);
     }
   }
 
-  return { result, userMessage, saved, model, persona, learn, getError: () => streamError };
+  return { result, userMessage, userMessages, saved, model, persona, learn, getError: () => streamError };
 }
 
 /** Turns provider errors into a message that is safe and useful to show users. */

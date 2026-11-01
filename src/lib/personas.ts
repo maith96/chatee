@@ -35,6 +35,9 @@ export function summarize(p: Persona, userId: string) {
     is_mine: p.owner_id === userId,
     bio: p.definition?.identity?.bio ?? null,
     role: p.definition?.relationship?.role ?? null,
+    age: p.definition?.identity?.age ?? null,
+    pronouns: p.definition?.identity?.pronouns ?? null,
+    interests: p.definition?.knowledge?.interests ?? [],
     multi_bubble: (p.definition?.communication?.bubbles ?? 1) > 1,
     max_bubbles: p.definition?.communication?.bubbles ?? 1,
   };

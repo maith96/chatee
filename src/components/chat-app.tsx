@@ -10,6 +10,7 @@ import { Logo } from "./logo";
 import { MemoryPanel } from "./memory-panel";
 import { ChatView } from "./chat-view";
 import { ModelPicker } from "./model-picker";
+import { PersonaProfile } from "./persona-profile";
 
 // The website talks to the same /api/v1 endpoints your later app will use.
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,6 +42,7 @@ export default function ChatApp({ email }: { email: string }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [defaultModel, setDefaultModel] = useState<ModelId>(DEFAULT_MODEL);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
   // For a new chat: undefined = still choosing, null = plain assistant, otherwise a persona.
   const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
@@ -131,8 +133,8 @@ export default function ChatApp({ email }: { email: string }) {
     <div className="flex h-dvh overflow-hidden">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-panel p-5 transition-transform md:static md:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-panel p-5 transition-transform duration-300 ease-out md:static md:translate-x-0 md:transition-none ${
+          sidebarOpen ? "translate-x-0 shadow-xl" : "-translate-x-full"
         }`}>
         <div className="mb-6 flex items-center gap-3">
           <Logo />
@@ -178,20 +180,25 @@ export default function ChatApp({ email }: { email: string }) {
           </form>
         </div>
       </aside>
-      {sidebarOpen && <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} />}
+      <div
+        className={`fixed inset-0 z-20 bg-black/20 transition-opacity duration-300 md:hidden ${sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden
+      />
 
       {/* Main */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-border px-4 py-4 md:px-8">
+        <header className="flex items-center gap-2 border-b border-border px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-8">
           <button className="rounded-lg p-2 md:hidden" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>☰</button>
           {currentPersona && !choosing ? (
-            <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button type="button" onClick={() => setProfileOpen(true)} aria-label={`View ${currentPersona.name}'s profile`}
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:opacity-80">
               <Avatar persona={currentPersona} size="sm" />
               <div className="min-w-0">
                 <div className="truncate font-medium">{currentPersona.name}</div>
                 {currentPersona.tagline && <div className="truncate text-xs text-muted">{currentPersona.tagline}</div>}
               </div>
-            </div>
+            </button>
           ) : (
             <div className="min-w-0 flex-1 truncate">
               <span className="hidden text-muted sm:inline">Workspace / </span>
@@ -219,10 +226,12 @@ export default function ChatApp({ email }: { email: string }) {
           model={model}
           onStart={startConversation}
           onReplied={refresh}
+          onOpenProfile={() => setProfileOpen(true)}
         />
         )}
       </main>
       {showMemory && currentPersona && <MemoryPanel persona={currentPersona} onClose={() => setShowMemory(false)} />}
+      {profileOpen && currentPersona && !choosing && <PersonaProfile persona={currentPersona} onClose={() => setProfileOpen(false)} />}
     </div>
   );
 }

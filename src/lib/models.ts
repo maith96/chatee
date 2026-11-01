@@ -65,7 +65,7 @@ export type ModelId = (typeof MODELS)[number]["id"];
 export type ModelInfo = { id: ModelId; name: string; description: string };
 
 /** First choice when nothing is selected; the server falls back further if its key is missing. */
-export const DEFAULT_MODEL: ModelId = "nova-fast";
+export const DEFAULT_MODEL: ModelId = "nova-smart";
 
 export function getModel(id: string | null | undefined) {
   return MODELS.find((m) => m.id === id) ?? MODELS.find((m) => m.id === DEFAULT_MODEL)!;
