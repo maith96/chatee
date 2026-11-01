@@ -7,6 +7,7 @@ import type { PersonaSummary } from "@/lib/personas";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "./avatar";
 import { Logo } from "./logo";
+import { MemoryPanel } from "./memory-panel";
 import { ChatView } from "./chat-view";
 import { ModelPicker } from "./model-picker";
 
@@ -43,6 +44,7 @@ export default function ChatApp({ email }: { email: string }) {
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
   // For a new chat: undefined = still choosing, null = plain assistant, otherwise a persona.
   const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
+  const [showMemory, setShowMemory] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -196,6 +198,12 @@ export default function ChatApp({ email }: { email: string }) {
               <span>{choosing ? "New chat" : (active?.title ?? "New conversation")}</span>
             </div>
           )}
+          {currentPersona && !choosing && (
+            <button onClick={() => setShowMemory(true)} title={`What ${currentPersona.name} remembers`}
+              className="rounded-2xl border border-border bg-surface px-3 py-2 text-sm shadow-sm hover:border-accent">
+              🧠<span className="ml-1 hidden sm:inline">Memory</span>
+            </button>
+          )}
           <span className="hidden text-sm text-muted sm:inline">Model</span>
           <ModelPicker value={model} models={models} onChange={setModel} />
         </header>
@@ -214,6 +222,7 @@ export default function ChatApp({ email }: { email: string }) {
         />
         )}
       </main>
+      {showMemory && currentPersona && <MemoryPanel persona={currentPersona} onClose={() => setShowMemory(false)} />}
     </div>
   );
 }

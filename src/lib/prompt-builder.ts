@@ -6,7 +6,7 @@
 //   5. right now        (local time, how long since the last message, relationship stage)
 //   6. style reminder   (length/bubble rules repeated; keep only if evals show it helps)
 import { BUBBLE_SEPARATOR } from "./bubbles";
-export { detectCrisis } from "./crisis";
+export { detectCrisis, detectMinor } from "./crisis";
 import type { PersonaDefinition } from "./persona-schema";
 
 export type Stage = "new" | "warm" | "close";
@@ -17,9 +17,17 @@ export type PromptContext = {
   minutesSinceLastUserMessage?: number | null;
   stage?: Stage;
   memories?: string[];
+  /** Details the persona has said about itself in earlier chats (to stay consistent). */
+  selfFacts?: string[];
+  /** Extra instruction for this reply (e.g. writing a check-in). */
+  task?: string;
   /** The user's latest message looks like it could be a crisis (set by detectCrisis). */
   crisis?: boolean;
+  /** The user's latest message says they're under 18 (set by detectMinor). */
+  minor?: boolean;
 };
+
+const MINOR_NOTE = `IMPORTANT, for this reply only: the user just said they're under 18. Persona is only for adults. Kindly and briefly tell them, in your own voice, that this app is meant for people 18 and over, so you can't keep chatting like this. Be warm, not scolding. No flirting or romance.`;
 
 const CRISIS_NOTE = `IMPORTANT, for this reply only: the user's last message may mean they're in crisis or thinking about hurting themselves. Put playfulness, flirting and your usual jokes aside. In your own warm voice, briefly:
 - tell them you're glad they told you and you care about them
@@ -104,6 +112,8 @@ function describeTime(ctx: PromptContext) {
   }
   const local = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
+    day: "numeric",
+    month: "long",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -153,6 +163,7 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     k.interests.length ? `Interests: ${k.interests.join(", ")}.` : "",
     k.opinions.length ? `Opinions you hold:\n${list(k.opinions)}` : "",
     k.details.length ? `Details about your life (stay consistent with these):\n${list(k.details)}` : "",
+    ctx.selfFacts?.length ? `Things you've mentioned about yourself in earlier chats (stay consistent):\n${list(ctx.selfFacts)}` : "",
     `Your relationship to the user: ${r.role}. ${romance}`,
     stageText ? `Right now you're at the "${stage}" stage with them: ${stageText}` : "",
     settings.avoidTopics.length ? `Topics you steer away from: ${settings.avoidTopics.join(", ")}.` : "",
@@ -183,7 +194,9 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
       ? `You may split a reply into up to ${bubbles} separate chat bubbles, like sending a few texts in a row. Put a line containing only ${BUBBLE_SEPARATOR} between bubbles. Use one bubble when that's more natural.`
       : `Reply with a single message. Never use ${BUBBLE_SEPARATOR}.`;
 
-  const memories = ctx.memories?.length ? list(ctx.memories) : "Nothing yet. Learn about them as you talk.";
+  const memories = ctx.memories?.length
+    ? `${list(ctx.memories)}\nBring these up naturally when relevant (e.g. ask how the thing they mentioned went). Don't list them or recite them.`
+    : "Nothing yet. Learn about them as you talk.";
 
   return [
     PLATFORM_RULES,
@@ -193,15 +206,10 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     `<what_you_know_about_them>\n${memories}\n</what_you_know_about_them>`,
     `<right_now>\nBackground for reacting naturally (e.g. noticing it's late, or that they've been away). Never state the time or quote this section.\n${describeTime(ctx)}\n${describeGap(ctx.minutesSinceLastUserMessage)}\n</right_now>`,
     `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness.`,
+    ctx.task ?? "",
+    ctx.minor ? MINOR_NOTE : "",
     ctx.crisis ? CRISIS_NOTE : "",
   ]
     .filter(Boolean)
     .join("\n\n");
-}
-
-/** Relationship stage from how much you've talked. Replaced by real per-user relationship state in the memory step. */
-export function stageFromMessageCount(userMessages: number): Stage {
-  if (userMessages < 25) return "new";
-  if (userMessages < 100) return "warm";
-  return "close";
 }

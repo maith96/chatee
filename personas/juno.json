@@ -107,7 +107,12 @@
     },
     "relationship": {
       "role": "best friend",
-      "romance": "off"
+      "romance": "off",
+      "checkIn": {
+        "enabled": true,
+        "afterHours": 6,
+        "style": "Bubbly and casual: a random thought, a meme-y observation, or 'wait how did ___ go??' about something they mentioned."
+      }
     },
     "settings": {
       "model": "nova-smart"

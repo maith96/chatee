@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { generateText } from "ai";
 import { splitBubbles, joinBubbles } from "../src/lib/bubbles";
 import { personaInputSchema, type PersonaDefinition } from "../src/lib/persona-schema";
-import { buildPersonaPrompt, detectCrisis } from "../src/lib/prompt-builder";
+import { buildPersonaPrompt, detectCrisis, detectMinor } from "../src/lib/prompt-builder";
 import { resolveModel } from "../src/lib/providers";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -190,6 +190,7 @@ async function runScenario(p: Persona, s: Scenario, run: number): Promise<Result
         minutesSinceLastUserMessage: i === 0 ? null : 1,
         stage: "new",
         crisis: detectCrisis(user),
+        minor: detectMinor(user),
       });
       history.push({ role: "user", content: user });
       const started = Date.now();

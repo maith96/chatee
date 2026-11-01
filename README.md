@@ -72,6 +72,27 @@ npm run personas:seed   # validates the JSON and regenerates supabase/personas-s
 
 Then run `supabase/personas-seed.sql` in the Supabase SQL Editor.
 
+**Memory and check-ins:** after each reply, a fast model extracts lasting facts (about the user, and details the
+persona said about itself) into `memories`; a grounding check drops anything that wasn't actually said. Users can see
+and delete them via the 🧠 Memory button. `relationships` tracks how much they've talked; the stage
+(new → warm → close) needs both messages and days. When a user reopens a persona chat after the persona's
+`checkIn.afterHours`, the persona texts first (never stacked; gentle wellbeing check only if they were struggling).
+
+**Safety layers:** crisis language and "I'm under 18" statements are detected in code and add an urgent instruction
+to that reply; crisis messages also always show a helpline card in the UI (and `crisis_support` in the API).
+
+### Testing persona quality
+
+```bash
+npm run eval                          # all personas, 16 scenarios each
+npm run eval -- juno --runs 2         # one persona, each scenario twice
+npm run eval -- --model nova-fast     # try a different model
+```
+
+Plays scripted conversations (`evals/scenarios.json`, per-persona expectations in `evals/expectations/`) against the
+real models, runs automatic checks (length, bubbles, style, honesty, crisis help, memory, copying examples) and a judge
+model, and writes a review page to `evals/reports/latest.html`. Run it after changing a persona or the prompt builder.
+
 **Rules enforced in the database:** every persona is 18+; users can only edit their own personas;
 private personas are visible only to their owner; unlisted ones are viewable by link.
 All app users must confirm they're 18+ (date of birth at sign-up; only the confirmation is stored).

@@ -151,8 +151,34 @@ while (true) {
 > React Native's built-in `fetch` doesn't support streaming bodies. Use `stream: false`,
 > or a streaming-capable fetch such as `expo/fetch` (Expo SDK 52+).
 
+**Safety:** if the message looks like the user may be in crisis, the JSON response includes
+`crisis_support` (helplines to show, e.g. 988 in the US, Samaritans 116 123 in the UK), and streamed responses
+include the header `X-Crisis-Support: 1`. Show these resources in your app whatever the persona replies.
+
 **Retries:** if a reply fails, send the same `content` again. The server reuses the
 unanswered message instead of saving a duplicate.
+
+### `POST /conversations/{id}/checkin`
+Call this when the user **opens a persona chat**. If they've been away long enough (per persona, e.g. 6–8 hours),
+the persona texts first and the new messages are returned (`kind: "checkin"`); otherwise `messages` is empty.
+Check-ins never stack: there's at most one until the user replies.
+Body (optional): `{ "timezone": "Europe/London" }` → `{ "messages": [ ... ] }`
+
+### `GET /personas/{id}/memories`
+What this persona remembers about the user, and how close they are.
+```json
+{ "about_you": [ { "id": "uuid", "content": "Has a dog called Biscuit; vet appointment on Friday", "created_at": "..." } ],
+  "about_them": [ { "id": "uuid", "content": "Has a sister who visits on weekends", "created_at": "..." } ],
+  "relationship": { "stage": "new", "label": "Getting to know each other", "messages": 12, "since": "..." } }
+```
+Memories are learned automatically after each reply and are private to the user. Stages (`new` → `warm` → `close`)
+need both enough messages and enough days, so they can't be rushed.
+
+### `DELETE /memories/{id}`
+Forget one memory. → `204`
+
+### `DELETE /personas/{id}/memories`
+Make the persona forget everything about the user. → `204`
 
 ## Quick test with curl
 

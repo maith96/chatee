@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { assertUuid, authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { CRISIS_RESOURCES, detectCrisis } from "@/lib/crisis";
 import { friendlyError, getConversation, isRateLimited, MAX_MESSAGE_CHARS, startReply } from "@/lib/chat-service";
@@ -31,13 +32,14 @@ export const POST = route<Params>(async (req, { params }) => {
   if (!conversation) throw errors.notFound("Conversation");
   if (await isRateLimited(db)) throw errors.rateLimited();
 
-  const { result, userMessage, saved, getError } = await startReply(db, {
+  const { result, userMessage, saved, getError, learn } = await startReply(db, {
     conversation,
     content,
     model: body.model as ModelId | undefined,
     timezone: typeof body.timezone === "string" ? body.timezone.slice(0, 64) : undefined,
     abortSignal: req.signal,
   });
+  after(learn); // update memories once the reply is done, without delaying it
 
   // Show helpline info whenever the message looks like a crisis, whatever the model replies.
   const crisis = detectCrisis(content);

@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { splitBubbles, stripPartialSeparator } from "@/lib/bubbles";
+import { joinBubbles, splitBubbles, stripPartialSeparator } from "@/lib/bubbles";
 import { CRISIS_RESOURCES, detectCrisis } from "@/lib/crisis";
 import type { Message } from "@/lib/chat-service";
 import { getModel, type ModelId } from "@/lib/models";
@@ -90,7 +90,7 @@ function ChatSession({
     [conversationId],
   );
 
-  const { messages, sendMessage, status, stop, error, regenerate, clearError } = useChat({
+  const { messages, sendMessage, setMessages, status, stop, error, regenerate, clearError } = useChat({
     id: conversationId ?? undefined,
     messages: initialMessages,
     transport,
@@ -105,6 +105,29 @@ function ChatSession({
       sendMessage({ text: pendingText }, { body: { model } });
     }
   }, [pendingText, sendMessage, model]);
+
+  // Opening a persona chat after a quiet spell: the persona may text first (the server decides).
+  const askedCheckIn = useRef(false);
+  useEffect(() => {
+    if (!conversationId || !persona || pendingText !== undefined || askedCheckIn.current) return;
+    askedCheckIn.current = true;
+    fetch(`/api/v1/conversations/${conversationId}/checkin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: timezone() }),
+    })
+      .then((res) => (res.ok ? res.json() : { messages: [] }))
+      .then(({ messages: fresh }: { messages: Message[] }) => {
+        if (!fresh?.length) return;
+        // One live message holding all bubbles, so they're revealed with typing pauses.
+        setMessages((current) => [
+          ...current,
+          { id: `checkin-${fresh[0].id}`, role: "assistant", parts: [{ type: "text", text: joinBubbles(fresh.map((m) => m.content)) }] },
+        ]);
+        onReplied();
+      })
+      .catch(() => {});
+  }, [conversationId, persona, pendingText, setMessages, onReplied]);
 
   // Keep the newest message in view (also as paced bubbles appear).
   const bottomRef = useRef<HTMLDivElement>(null);

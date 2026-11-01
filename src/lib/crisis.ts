@@ -20,6 +20,14 @@ export function detectCrisis(text: string): boolean {
   return CRISIS_PATTERNS.some((p) => p.test(text));
 }
 
+// "I'm 16", "im 15 years old", "i am actually 17" … (Persona is 18+ only.)
+const MINOR_PATTERN =
+  /\b(i'?m|i am|im)\s+(actually\s+|only\s+|just\s+)?(1[0-7]|[0-9])(\s*(yo|y\/o|years?\s+old)\b|(?=\s*($|[.!?,]|\s+(lol|haha|btw|tho|though|and|so|now|rn)\b)))/i;
+
+export function detectMinor(text: string): boolean {
+  return MINOR_PATTERN.test(text);
+}
+
 export const CRISIS_RESOURCES = [
   { region: "US", text: "Call or text 988 (Suicide & Crisis Lifeline)", href: "tel:988" },
   { region: "UK & Ireland", text: "Call Samaritans on 116 123 (free, 24/7)", href: "tel:116123" },

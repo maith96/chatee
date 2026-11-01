@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { joinBubbles, splitBubbles } from "./bubbles";
 import { type ModelId } from "./models";
 import { getPersona, type Persona } from "./personas";
-import { buildPersonaPrompt, detectCrisis, stageFromMessageCount } from "./prompt-builder";
+import { bumpRelationship, extractMemories, getRelationship, listMemories, stageFor, type Memory, type Relationship } from "./memory";
+import { buildPersonaPrompt, detectCrisis, detectMinor } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
 
 export const SYSTEM_PROMPT =
@@ -30,11 +31,12 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   model: string | null;
+  kind?: "reply" | "checkin";
   created_at: string;
 };
 
 const CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at";
-const MESSAGE_FIELDS = "id, conversation_id, role, content, model, created_at";
+const MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, created_at";
 export const DEFAULT_TITLE = "New conversation";
 
 // ---- Conversations -------------------------------------------------------
@@ -101,7 +103,14 @@ export async function listMessages(db: SupabaseClient, conversationId: string) {
   return data as Message[];
 }
 
-type NewMessage = { conversation_id: string; role: "user" | "assistant"; content: string; model?: string; created_at?: string };
+type NewMessage = {
+  conversation_id: string;
+  role: "user" | "assistant";
+  content: string;
+  model?: string;
+  kind?: "reply" | "checkin";
+  created_at?: string;
+};
 
 async function insertMessage(db: SupabaseClient, row: NewMessage) {
   const { data, error } = await db.from("messages").insert(row).select(MESSAGE_FIELDS).single();
@@ -110,7 +119,7 @@ async function insertMessage(db: SupabaseClient, row: NewMessage) {
 }
 
 /** Saves several bubbles at once, 1ms apart so they keep their order. */
-async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
+export async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
   const start = Date.now();
   const stamped = rows.map((r, i) => ({ ...r, created_at: new Date(start + i).toISOString() }));
   const { data, error } = await db.from("messages").insert(stamped).select(MESSAGE_FIELDS);
@@ -119,7 +128,7 @@ async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
 }
 
 /** History for the model: consecutive assistant bubbles become one turn, in the bubble format. */
-function toModelMessages(messages: Message[]) {
+export function toModelMessages(messages: Message[]) {
   const turns: { role: "user" | "assistant"; content: string }[] = [];
   for (const m of messages) {
     const prev = turns.at(-1);
@@ -130,16 +139,41 @@ function toModelMessages(messages: Message[]) {
   return turns;
 }
 
+function noteDate(iso: string, timezone?: string) {
+  try {
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: timezone }).format(new Date(iso));
+  } catch {
+    return new Date(iso).toDateString();
+  }
+}
+
+export type PersonaState = { memories: { user: Memory[]; self: Memory[] }; relationship: Relationship | null };
+
+export async function loadPersonaState(db: SupabaseClient, personaId: string): Promise<PersonaState> {
+  const [memories, relationship] = await Promise.all([listMemories(db, personaId), getRelationship(db, personaId)]);
+  return { memories, relationship };
+}
+
 /** The system prompt: the persona's if the chat has one, otherwise the plain assistant. */
-function systemPromptFor(persona: Persona | null, history: Message[], latest: string, timezone?: string) {
+export function systemPromptFor(
+  persona: Persona | null,
+  state: PersonaState | null,
+  history: Message[],
+  opts: { latest?: string; timezone?: string; task?: string } = {},
+) {
   if (!persona) return SYSTEM_PROMPT;
   const lastUser = [...history].reverse().find((m) => m.role === "user");
   const minutesSinceLastUserMessage = lastUser ? (Date.now() - new Date(lastUser.created_at).getTime()) / 60000 : null;
   return buildPersonaPrompt(persona.name, persona.definition, {
-    timezone,
+    timezone: opts.timezone,
     minutesSinceLastUserMessage,
-    stage: stageFromMessageCount(history.filter((m) => m.role === "user").length),
-    crisis: detectCrisis(latest),
+    stage: stageFor(state?.relationship ?? null),
+    // Dated, so the persona can tell "Friday" was upcoming vs. already past.
+    memories: state?.memories.user.map((m) => `${m.content} (noted ${noteDate(m.created_at, opts.timezone)})`),
+    selfFacts: state?.memories.self.map((m) => m.content),
+    crisis: opts.latest ? detectCrisis(opts.latest) : false,
+    minor: opts.latest ? detectMinor(opts.latest) : false,
+    task: opts.task,
   });
 }
 
@@ -165,12 +199,14 @@ export async function startReply(
   opts: { conversation: Conversation; content: string; model?: ModelId; timezone?: string; abortSignal?: AbortSignal },
 ) {
   const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
-  const [history, persona] = await Promise.all([
+  const personaId = opts.conversation.persona_id;
+  const [history, persona, state] = await Promise.all([
     listMessages(db, opts.conversation.id),
-    opts.conversation.persona_id ? getPersona(db, opts.conversation.persona_id) : Promise.resolve(null),
+    personaId ? getPersona(db, personaId) : Promise.resolve(null),
+    personaId ? loadPersonaState(db, personaId) : Promise.resolve(null),
   ]);
   // Computed before the new message is saved, so "time since last message" is the real gap.
-  const instructions = systemPromptFor(persona, history, opts.content, opts.timezone);
+  const instructions = systemPromptFor(persona, state, history, { latest: opts.content, timezone: opts.timezone });
 
   // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
   const last = history.at(-1);
@@ -179,6 +215,7 @@ export async function startReply(
   const userMessage = isRetry
     ? last
     : await insertMessage(db, { conversation_id: opts.conversation.id, role: "user", content: opts.content });
+  if (persona && !isRetry) await bumpRelationship(db, persona.id);
 
   // Name the chat after its first message (free: no extra model call).
   if (history.length === 0 && opts.conversation.title === DEFAULT_TITLE) {
@@ -228,7 +265,19 @@ export async function startReply(
     },
   });
 
-  return { result, userMessage, saved, model, persona, getError: () => streamError };
+  /** Learn from this exchange (new memories). Call from `after()` so it never delays the reply. */
+  async function learn() {
+    if (!persona || !state) return;
+    const bubbles = await saved;
+    if (!bubbles.length) return;
+    try {
+      await extractMemories(db, persona, opts.content, bubbles.map((b) => b.content).join("\n"), state.memories);
+    } catch (err) {
+      console.error("Memory extraction failed", err);
+    }
+  }
+
+  return { result, userMessage, saved, model, persona, learn, getError: () => streamError };
 }
 
 /** Turns provider errors into a message that is safe and useful to show users. */

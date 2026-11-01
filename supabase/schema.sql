@@ -129,3 +129,57 @@ create policy "delete own personas" on public.personas
 alter table public.conversations
   add column if not exists persona_id uuid references public.personas(id) on delete set null;
 create index if not exists conversations_persona_idx on public.conversations (persona_id);
+
+-- =====================================================================
+-- v3: memory, relationships and check-ins. Safe to re-run.
+-- =====================================================================
+
+-- What each persona remembers. kind 'user' = facts about the user; 'self' = details the persona
+-- has said about itself (so it stays consistent). Users can view and delete these in the app.
+create table if not exists public.memories (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  persona_id  uuid not null references public.personas(id) on delete cascade,
+  kind        text not null check (kind in ('user', 'self')),
+  content     text not null check (char_length(content) between 1 and 300),
+  created_at  timestamptz not null default now()
+);
+create index if not exists memories_user_persona_idx on public.memories (user_id, persona_id, created_at desc);
+alter table public.memories enable row level security;
+grant select, insert, delete on public.memories to authenticated;
+drop policy if exists "own memories" on public.memories;
+create policy "own memories" on public.memories
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- How well each user and persona know each other. Grows with real conversation over time.
+create table if not exists public.relationships (
+  user_id               uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  persona_id            uuid not null references public.personas(id) on delete cascade,
+  user_messages         integer not null default 0,
+  first_chat_at         timestamptz not null default now(),
+  last_user_message_at  timestamptz,
+  last_checkin_at       timestamptz,
+  primary key (user_id, persona_id)
+);
+alter table public.relationships enable row level security;
+grant select, insert, update on public.relationships to authenticated;
+drop policy if exists "own relationships" on public.relationships;
+create policy "own relationships" on public.relationships
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Counts one user message atomically and returns the updated relationship.
+create or replace function public.bump_relationship(p_persona_id uuid)
+returns public.relationships
+language sql security invoker set search_path = public as $$
+  insert into public.relationships (user_id, persona_id, user_messages, last_user_message_at)
+  values (auth.uid(), p_persona_id, 1, now())
+  on conflict (user_id, persona_id) do update
+    set user_messages = public.relationships.user_messages + 1,
+        last_user_message_at = now()
+  returning *;
+$$;
+grant execute on function public.bump_relationship(uuid) to authenticated;
+
+-- Messages a persona sends first (check-ins) are marked so they're never stacked.
+alter table public.messages
+  add column if not exists kind text not null default 'reply' check (kind in ('reply', 'checkin'));
