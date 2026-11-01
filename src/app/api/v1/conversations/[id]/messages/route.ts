@@ -1,4 +1,5 @@
 import { assertUuid, authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
+import { CRISIS_RESOURCES, detectCrisis } from "@/lib/crisis";
 import { friendlyError, getConversation, isRateLimited, MAX_MESSAGE_CHARS, startReply } from "@/lib/chat-service";
 import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
@@ -38,9 +39,17 @@ export const POST = route<Params>(async (req, { params }) => {
     abortSignal: req.signal,
   });
 
+  // Show helpline info whenever the message looks like a crisis, whatever the model replies.
+  const crisis = detectCrisis(content);
+
   if (body.stream === true) {
     return result.toTextStreamResponse({
-      headers: { ...corsHeaders(req), "X-User-Message-Id": userMessage.id, "Cache-Control": "no-cache" },
+      headers: {
+        ...corsHeaders(req),
+        "X-User-Message-Id": userMessage.id,
+        "Cache-Control": "no-cache",
+        ...(crisis ? { "X-Crisis-Support": "1" } : {}),
+      },
     });
   }
 
@@ -53,7 +62,15 @@ export const POST = route<Params>(async (req, { params }) => {
   if (!assistantMessages.length) {
     return json(req, { error: { code: "generation_failed", message: "The model returned an empty reply." } }, 502);
   }
-  return json(req, { user_message: userMessage, assistant_messages: assistantMessages }, 201);
+  return json(
+    req,
+    {
+      user_message: userMessage,
+      assistant_messages: assistantMessages,
+      ...(crisis ? { crisis_support: CRISIS_RESOURCES } : {}),
+    },
+    201,
+  );
 });
 
 export const OPTIONS = preflight;

@@ -9,11 +9,17 @@ export const MAX_BUBBLES = 4;
  * Splits a reply into bubbles, dropping empty ones. For multi-bubble personas a blank line also
  * starts a new bubble (models often use paragraphs for that). Extra bubbles merge into the last.
  */
-export function splitBubbles(text: string, { paragraphs = false }: { paragraphs?: boolean } = {}): string[] {
-  let parts = text.split(SPLIT);
+export function splitBubbles(
+  text: string,
+  { paragraphs = false, max = MAX_BUBBLES }: { paragraphs?: boolean; max?: number } = {},
+): string[] {
+  // Models sometimes garble the separator ("||", or pipes split across lines): treat any line of
+  // only pipes as a separator.
+  let parts = text.replace(/^[ \t]*\|+[ \t]*$/gm, BUBBLE_SEPARATOR).split(SPLIT);
   if (paragraphs) parts = parts.flatMap((p) => p.split(PARAGRAPH));
   parts = parts.map((b) => b.trim()).filter(Boolean);
-  if (parts.length > MAX_BUBBLES) parts = [...parts.slice(0, MAX_BUBBLES - 1), parts.slice(MAX_BUBBLES - 1).join("\n")];
+  const limit = Math.max(1, Math.min(max, MAX_BUBBLES));
+  if (parts.length > limit) parts = [...parts.slice(0, limit - 1), parts.slice(limit - 1).join("\n")];
   return parts;
 }
 

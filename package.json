@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "personas:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-persona-seed.mts"
+    "personas:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-persona-seed.mts",
+    "eval": "tsx scripts/eval-personas.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.109",
@@ -31,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

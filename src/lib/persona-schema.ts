@@ -7,7 +7,7 @@ const shortText = (max: number) => z.string().trim().min(1).max(max);
 
 /** A sample reply. A list means several chat bubbles sent in a row. */
 const example = z.object({
-  situation: shortText(40), // e.g. "casual", "good news", "user is upset", "disagreement", "serious question"
+  situation: shortText(60), // e.g. "casual", "good news", "user is upset", "disagreement", "serious question"
   text: z.union([shortText(400), z.array(shortText(300)).min(1).max(3)]),
 });
 
@@ -41,7 +41,7 @@ export const personaDefinitionSchema = z.object({
     slang: z.number().int().min(0).max(2).default(0),
     humour: shortText(120).optional(),
     quirks: z.array(shortText(200)).max(8).default([]),
-    examples: z.array(example).min(1).max(8),
+    examples: z.array(example).min(1).max(10),
   }),
 
   knowledge: z

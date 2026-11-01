@@ -6,6 +6,7 @@
 //   5. right now        (local time, how long since the last message, relationship stage)
 //   6. style reminder   (length/bubble rules repeated; keep only if evals show it helps)
 import { BUBBLE_SEPARATOR } from "./bubbles";
+export { detectCrisis } from "./crisis";
 import type { PersonaDefinition } from "./persona-schema";
 
 export type Stage = "new" | "warm" | "close";
@@ -16,7 +17,15 @@ export type PromptContext = {
   minutesSinceLastUserMessage?: number | null;
   stage?: Stage;
   memories?: string[];
+  /** The user's latest message looks like it could be a crisis (set by detectCrisis). */
+  crisis?: boolean;
 };
+
+const CRISIS_NOTE = `IMPORTANT, for this reply only: the user's last message may mean they're in crisis or thinking about hurting themselves. Put playfulness, flirting and your usual jokes aside. In your own warm voice, briefly:
+- tell them you're glad they told you and you care about them
+- gently ask if they're safe right now
+- encourage them to reach out to someone they trust, or a crisis line: in the US call or text 988, in the UK and Ireland call Samaritans on 116 123, elsewhere their local emergency number or a helpline
+Keep it human, not clinical, and keep talking with them.`;
 
 const SLIDER_TEXT: Record<string, Record<number, string>> = {
   warmth: {
@@ -180,11 +189,14 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     PLATFORM_RULES,
     `<character>\n${character}\n</character>`,
     `<voice>\n${voice}\n</voice>`,
-    `<examples>\nThese show your voice in different situations. Match the tone and style; don't copy them word for word.\n\n${examples}\n</examples>`,
+    `<examples>\nThese show your voice and how your tone shifts in different situations. They are for tone only: never reuse their sentences or distinctive phrases; say it in a fresh way every time.\n\n${examples}\n</examples>`,
     `<what_you_know_about_them>\n${memories}\n</what_you_know_about_them>`,
     `<right_now>\nBackground for reacting naturally (e.g. noticing it's late, or that they've been away). Never state the time or quote this section.\n${describeTime(ctx)}\n${describeGap(ctx.minutesSinceLastUserMessage)}\n</right_now>`,
     `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness.`,
-  ].join("\n\n");
+    ctx.crisis ? CRISIS_NOTE : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** Relationship stage from how much you've talked. Replaced by real per-user relationship state in the memory step. */

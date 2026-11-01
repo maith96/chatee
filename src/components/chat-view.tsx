@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { splitBubbles, stripPartialSeparator } from "@/lib/bubbles";
+import { CRISIS_RESOURCES, detectCrisis } from "@/lib/crisis";
 import type { Message } from "@/lib/chat-service";
 import { getModel, type ModelId } from "@/lib/models";
 import type { PersonaSummary } from "@/lib/personas";
@@ -276,7 +277,7 @@ function MessageBubbles({
   const bubbles = useMemo(() => {
     if (!isPersonaReply) return raw.trim() ? [raw] : [];
     const text = streaming ? stripPartialSeparator(raw) : raw;
-    return splitBubbles(text, { paragraphs: persona.multi_bubble });
+    return splitBubbles(text, { paragraphs: persona.multi_bubble, max: persona.max_bubbles });
   }, [raw, isPersonaReply, streaming, persona]);
 
   // While streaming, the last bubble may still be growing; it's complete once a later one starts or the stream ends.
@@ -298,9 +299,12 @@ function MessageBubbles({
 
   if (message.role === "user") {
     return (
-      <Row role="user">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-accent px-5 py-3 text-white shadow-sm">{raw}</div>
-      </Row>
+      <>
+        <Row role="user">
+          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-accent px-5 py-3 text-white shadow-sm">{raw}</div>
+        </Row>
+        {detectCrisis(raw) && <SupportCard />}
+      </>
     );
   }
   // No text at all yet: the chat-level typing indicator covers this.
@@ -317,6 +321,28 @@ function MessageBubbles({
       {waitingForNext && (
         <Row role="assistant" persona={persona} hideAvatar={continued || visible.length > 0}><Typing /></Row>
       )}
+    </div>
+  );
+}
+
+/** Always shown after a message that looks like a crisis, so help is visible whatever the persona says. */
+function SupportCard() {
+  return (
+    <div role="note" aria-label="Support resources"
+      className="mx-auto max-w-md rounded-2xl border border-border bg-panel px-5 py-4 text-sm shadow-sm">
+      <p className="font-medium">You don&apos;t have to go through this alone 💛</p>
+      <p className="mt-1 text-muted">If you&apos;re struggling or not safe, please reach out to someone now:</p>
+      <ul className="mt-2 space-y-1">
+        {CRISIS_RESOURCES.map((r) => (
+          <li key={r.region}>
+            <span className="text-muted">{r.region}:</span>{" "}
+            <a href={r.href} className="font-medium text-accent underline" target={r.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
+              {r.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted">If you&apos;re in immediate danger, call your local emergency number.</p>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { joinBubbles, splitBubbles } from "./bubbles";
 import { type ModelId } from "./models";
 import { getPersona, type Persona } from "./personas";
-import { buildPersonaPrompt, stageFromMessageCount } from "./prompt-builder";
+import { buildPersonaPrompt, detectCrisis, stageFromMessageCount } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
 
 export const SYSTEM_PROMPT =
@@ -131,7 +131,7 @@ function toModelMessages(messages: Message[]) {
 }
 
 /** The system prompt: the persona's if the chat has one, otherwise the plain assistant. */
-function systemPromptFor(persona: Persona | null, history: Message[], timezone?: string) {
+function systemPromptFor(persona: Persona | null, history: Message[], latest: string, timezone?: string) {
   if (!persona) return SYSTEM_PROMPT;
   const lastUser = [...history].reverse().find((m) => m.role === "user");
   const minutesSinceLastUserMessage = lastUser ? (Date.now() - new Date(lastUser.created_at).getTime()) / 60000 : null;
@@ -139,6 +139,7 @@ function systemPromptFor(persona: Persona | null, history: Message[], timezone?:
     timezone,
     minutesSinceLastUserMessage,
     stage: stageFromMessageCount(history.filter((m) => m.role === "user").length),
+    crisis: detectCrisis(latest),
   });
 }
 
@@ -169,7 +170,7 @@ export async function startReply(
     opts.conversation.persona_id ? getPersona(db, opts.conversation.persona_id) : Promise.resolve(null),
   ]);
   // Computed before the new message is saved, so "time since last message" is the real gap.
-  const instructions = systemPromptFor(persona, history, opts.timezone);
+  const instructions = systemPromptFor(persona, history, opts.content, opts.timezone);
 
   // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
   const last = history.at(-1);
@@ -201,8 +202,9 @@ export async function startReply(
     onEnd: async ({ text }) => {
       try {
         // Persona replies can be several bubbles: one row each. The plain assistant keeps one row.
-        const parts = persona
-          ? splitBubbles(text, { paragraphs: persona.definition.communication.bubbles > 1 })
+        const c = persona?.definition.communication;
+        const parts = c
+          ? splitBubbles(text, { paragraphs: c.bubbles > 1, max: c.bubbles })
           : text.trim()
             ? [text]
             : [];
