@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #fff8f0;
+  --panel: #fffdf9;
+  --surface: #ffffff;
+  --border: #f1e6da;
+  --text: #2a1f2d;
+  --muted: #7a6b80;
+  --accent: #ff4f87;
+  --accent-soft: #ffe3ec;
+  --accent-text: #ffffff;
+  --code-bg: #2a1f2d;
+  --code-text: #fbeff3;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #17121a;
+    --panel: #1d1720;
+    --surface: #241d28;
+    --border: #352b3a;
+    --text: #f4ecf6;
+    --muted: #a898ae;
+    --accent: #ff5c90;
+    --accent-soft: #3a2230;
+    --code-bg: #0f0b11;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #17121a;
+  --panel: #1d1720;
+  --surface: #241d28;
+  --border: #352b3a;
+  --text: #f4ecf6;
+  --muted: #a898ae;
+  --accent: #ff5c90;
+  --accent-soft: #3a2230;
+  --code-bg: #0f0b11;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* Markdown inside assistant messages */
+.prose-chat > * + * { margin-top: 0.75em; }
+.prose-chat ul { list-style: disc; padding-left: 1.4em; }
+.prose-chat ol { list-style: decimal; padding-left: 1.4em; }
+.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 650; }
+.prose-chat h1 { font-size: 1.25em; } .prose-chat h2 { font-size: 1.15em; } .prose-chat h3 { font-size: 1.05em; }
+.prose-chat a { color: var(--accent); text-decoration: underline; }
+.prose-chat code { background: var(--accent-soft); padding: 0.1em 0.35em; border-radius: 6px; font-size: 0.9em; }
+.prose-chat pre { background: var(--code-bg); color: var(--code-text); padding: 0.9em 1em; border-radius: 12px; overflow-x: auto; }
+.prose-chat pre code { background: none; padding: 0; color: inherit; }
+.prose-chat table { border-collapse: collapse; display: block; overflow-x: auto; }
+.prose-chat th, .prose-chat td { border: 1px solid var(--border); padding: 0.35em 0.7em; }
+.prose-chat blockquote { border-left: 3px solid var(--accent); padding-left: 0.8em; color: var(--muted); }
+
+@keyframes bounce-dot { 0%, 80%, 100% { transform: translateY(0); opacity: .4 } 40% { transform: translateY(-4px); opacity: 1 } }
+.typing span { animation: bounce-dot 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: .15s }
+.typing span:nth-child(3) { animation-delay: .3s }

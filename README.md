@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Persona
 
-## Getting Started
+An AI chat app built with **Next.js + Vercel AI SDK + Gemini (free tier) + Supabase**, hosted on Vercel.
+It includes a **public REST API** (`/api/v1`) so a later app (mobile, desktop, another site) can use the same accounts and chats. See [API.md](./API.md).
 
-First, run the development server:
+**Features:** streaming replies · Markdown and code blocks with copy buttons · chats saved per user · auto-titled, renameable and deletable chats ·
+model picker · starter prompts · stop and retry · friendly error messages · per-user rate limit · mobile layout · dark mode (follows the system setting).
+
+## 1. Get your keys (free)
+
+1. **Gemini:** go to https://aistudio.google.com, then **Get API key**.
+2. **Supabase:** create a project at https://supabase.com.
+   - **SQL Editor:** paste the contents of [`supabase/schema.sql`](./supabase/schema.sql) and click **Run**.
+   - **Project Settings → API:** copy the **Project URL** and the **publishable** (or `anon`) key.
+   - **Authentication → URL Configuration:** set **Site URL** to your app URL (e.g. `http://localhost:3000`, later your Vercel URL).
+
+## 2. Run locally
 
 ```bash
+cp .env.example .env.local   # then fill in the values
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000, sign up, and start chatting.
+By default Supabase emails a confirmation link on sign-up. For quicker local testing you can turn off
+**Authentication → Sign In / Providers → Email → Confirm email**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 3. Deploy to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push this folder to a GitHub repository.
+2. On https://vercel.com, click **Add New → Project** and import the repository.
+3. Add the same environment variables from `.env.local` (Settings → Environment Variables).
+4. Deploy, then put the Vercel URL into Supabase's **Site URL** (and **Redirect URLs**).
 
-## Learn More
+## Project layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    page.tsx                         # chat page (requires sign-in)
+    login/                           # sign in / sign up
+    auth/callback/route.ts           # email confirmation links
+    api/chat/route.ts                # streaming endpoint for the website UI
+    api/v1/...                       # public REST API for other apps (see API.md)
+  components/                        # chat UI (sidebar, messages, model picker, markdown)
+  lib/
+    chat-service.ts                  # shared chat logic: history, Gemini call, saving, rate limit
+    models.ts                        # "Terra Fast" etc. → Gemini model IDs
+    api.ts                           # API auth (Bearer token or cookie), errors, CORS
+    supabase/                        # Supabase clients
+  proxy.ts                           # keeps the login session fresh; redirects signed-out users
+supabase/schema.sql                  # tables + Row Level Security
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Customizing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Personality:** edit `SYSTEM_PROMPT` in `src/lib/chat-service.ts`.
+- **Models:** edit `src/lib/models.ts`. The `-latest` aliases always use Google's current models.
+- **Rate limit:** set `RATE_LIMIT_PER_MINUTE` (default 15 messages per user per minute).
+- **Colors:** the CSS variables at the top of `src/app/globals.css`.
 
-## Deploy on Vercel
+## Free-tier notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Gemini's free tier has per-minute and per-day limits, and Google may use free-tier prompts to improve its products. Don't send sensitive data.
+- The Gemini key stays on the server. Users never see it.
