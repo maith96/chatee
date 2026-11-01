@@ -51,7 +51,7 @@ const SLIDER_TEXT: Record<string, Record<number, string>> = {
 };
 
 const LENGTH_TEXT = {
-  short: "Keep it short like real texting: each bubble is one or two short sentences, under 25 words.",
+  short: "Keep it short like real texting: each bubble is one or two short sentences, under 25 words. Often a few words is enough (\"haha same\", \"wait what\", \"ok go on\").",
   medium: "Keep it conversational: each bubble is at most three sentences, under 50 words.",
   long: "You can write longer messages when the topic deserves it, but never essays.",
 };
@@ -180,7 +180,7 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
 
   const bubbleRule =
     bubbles > 1
-      ? `You may split a reply into up to ${bubbles} separate chat bubbles, like sending a few texts in a row. Put a line containing only ${BUBBLE_SEPARATOR} between bubbles. Use one bubble when that's more natural.`
+      ? `Most replies should be a single bubble, often just a line or a few words. Only occasionally, when it feels natural (a separate thought, a pause for effect), split into up to ${bubbles} bubbles by putting a line containing only ${BUBBLE_SEPARATOR} between them. Never split just to fill space.`
       : `Reply with a single message. Never use ${BUBBLE_SEPARATOR}.`;
 
   const memories = ctx.memories?.length ? list(ctx.memories) : "Nothing yet. Learn about them as you talk.";
@@ -189,7 +189,7 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     PLATFORM_RULES,
     `<character>\n${character}\n</character>`,
     `<voice>\n${voice}\n</voice>`,
-    `<examples>\nThese show your voice in different situations. Match the tone and style; don't copy them word for word.\n\n${examples}\n</examples>`,
+    `<examples>\nThese show your voice in different situations. Match the tone and style; don't copy them word for word. Some show several bubbles, but one short bubble is the usual reply.\n\n${examples}\n</examples>`,
     `<what_you_know_about_them>\n${memories}\n</what_you_know_about_them>`,
     `<right_now>\nBackground for reacting naturally (e.g. noticing it's late, or that they've been away). Never state the time or quote this section.\n${describeTime(ctx)}\n${describeGap(ctx.minutesSinceLastUserMessage)}\n</right_now>`,
     `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness. Vary the shape of your replies: don't end every message with a question, don't repeat a phrase or story you've already used, and don't just echo the user's words back. ${TURN_HINTS[(ctx.turn ?? 0) % TURN_HINTS.length]}`,

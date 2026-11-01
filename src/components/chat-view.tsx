@@ -16,6 +16,8 @@ const ASSISTANT_STARTERS = [
   "Brainstorm 10 project ideas",
   "Plan a healthy week of meals",
 ];
+/** How long a persona waits after your last bubble (or keystroke) before reading and replying. */
+const REPLY_DELAY_MS = 3000;
 const PERSONA_OPENERS = ["hey! 👋", "I need to vent", "tell me about yourself"];
 
 const timezone = () => {
@@ -25,6 +27,16 @@ const timezone = () => {
     return undefined;
   }
 };
+
+type Meta = { createdAt?: string };
+type Queued = { id: number; text: string; at: string };
+
+const createdAtOf = (m: UIMessage) => (m.metadata as Meta | undefined)?.createdAt;
+const textParts = (m: UIMessage) => m.parts.flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text] : []));
+function clock(iso: string | undefined) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 type Props = {
   conversationId: string | null;
@@ -49,7 +61,7 @@ export function ChatView(props: Props) {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error?.message ?? "Could not load this chat.");
         setInitial(
-          (data.messages as Message[]).map((m) => ({ id: m.id, role: m.role, parts: [{ type: "text", text: m.content }] })),
+          (data.messages as Message[]).map((m) => ({ id: m.id, role: m.role, parts: [{ type: "text", text: m.content }], metadata: { createdAt: m.created_at } })),
         );
       })
       .catch((e: Error) => setLoadError(e.message));
@@ -70,6 +82,9 @@ function ChatSession({
   initialMessages,
 }: Props & { initialMessages: UIMessage[] }) {
   const [input, setInput] = useState("");
+  // Bubbles you've sent that the persona hasn't "read" yet; sent together once you pause.
+  const [queue, setQueue] = useState<Queued[]>([]);
+  const queueId = useRef(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const savedIds = useMemo(() => new Set(initialMessages.map((m) => m.id)), [initialMessages]);
@@ -82,8 +97,8 @@ function ChatSession({
         // Send only the new text; the server keeps the full history in Supabase.
         prepareSendMessagesRequest: ({ messages, body }) => {
           const last = [...messages].reverse().find((m) => m.role === "user");
-          const text = last?.parts.map((p) => (p.type === "text" ? p.text : "")).join("") ?? "";
-          return { body: { conversationId, text, model: body?.model, timezone: timezone() } };
+          const texts = last ? textParts(last) : [];
+          return { body: { conversationId, texts, model: body?.model, timezone: timezone() } };
         },
       }),
     [conversationId],
@@ -98,10 +113,13 @@ function ChatSession({
 
   // Send the first message of a brand-new conversation once, right after it's created.
   const sentPending = useRef(false);
+  // useChat aborts its request when the component unmounts, and Strict Mode (dev) unmounts and
+  // remounts once. Reset the guard on unmount so the remount sends again instead of never replying.
+  useEffect(() => () => { sentPending.current = false; }, []);
   useEffect(() => {
     if (pendingText && !sentPending.current) {
       sentPending.current = true;
-      sendMessage({ text: pendingText }, { body: { model } });
+      sendMessage({ text: pendingText, metadata: { createdAt: new Date().toISOString() } }, { body: { model } });
     }
   }, [pendingText, sendMessage, model]);
 
@@ -110,7 +128,21 @@ function ChatSession({
   const [revealTick, setRevealTick] = useState(0);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, status, revealTick]);
+  }, [messages, status, revealTick, queue.length]);
+
+  // Wait for a pause (no new bubble or keystroke) before sending the queued bubbles as one request.
+  useEffect(() => {
+    if (!queue.length) return;
+    const timer = setTimeout(() => {
+      setQueue([]);
+      clearError();
+      sendMessage(
+        { parts: queue.map((q) => ({ type: "text" as const, text: q.text })), metadata: { createdAt: queue[0].at } },
+        { body: { model } },
+      );
+    }, REPLY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [queue, input, model, sendMessage, clearError]);
 
   const streaming = status === "submitted" || status === "streaming";
   const busy = streaming || starting;
@@ -132,12 +164,18 @@ function ChatSession({
       }
       return;
     }
+    const at = new Date().toISOString();
+    if (persona) {
+      setQueue((q) => [...q, { id: queueId.current++, text, at }]);
+      return;
+    }
     clearError();
-    sendMessage({ text }, { body: { model } });
+    sendMessage({ text, metadata: { createdAt: at } }, { body: { model } });
   }
 
   const last = messages.at(-1);
   const lastHasText = last?.role === "assistant" && last.parts.some((p) => p.type === "text" && p.text.trim());
+  const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id;
   const showTyping = status === "submitted" || starting || (pendingText && messages.length === 0) || (status === "streaming" && !lastHasText);
 
   return (
@@ -165,6 +203,7 @@ function ChatSession({
 
           {messages.map((m, i) => {
             const prev = messages[i - 1];
+            const next = messages[i + 1];
             const live = !savedIds.has(m.id);
             return (
               <MessageBubbles
@@ -173,12 +212,21 @@ function ChatSession({
                 persona={persona}
                 // Saved bubbles are separate rows: only the first in a run gets the avatar.
                 continued={prev?.role === m.role}
+                lastInRun={next?.role !== m.role && !(m.role === "user" && queue.length)}
+                receipt={m.role === "user" && m.id === lastUserId && !queue.length ? (error ? "Not delivered" : "Read") : undefined}
                 live={live}
                 streaming={live && streaming && i === messages.length - 1}
                 onReveal={() => setRevealTick((t) => t + 1)}
               />
             );
           })}
+
+          {queue.length > 0 && (
+            <div className="space-y-1.5">
+              {queue.map((q) => <UserBubble key={q.id} text={q.text} />)}
+              <Meta role="user">{clock(queue.at(-1)!.at)} · Sent</Meta>
+            </div>
+          )}
 
           {showTyping && <Row role="assistant" persona={persona}><Typing /></Row>}
 
@@ -260,6 +308,8 @@ function MessageBubbles({
   message,
   persona,
   continued,
+  lastInRun,
+  receipt,
   live,
   streaming,
   onReveal,
@@ -267,11 +317,16 @@ function MessageBubbles({
   message: UIMessage;
   persona: PersonaSummary | null;
   continued: boolean;
+  lastInRun: boolean;
+  receipt?: string;
   live: boolean;
   streaming: boolean;
   onReveal: () => void;
 }) {
   const raw = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+  // Messages saved earlier carry their time; live ones are stamped when they first appear.
+  const [liveTime] = useState(() => new Date().toISOString());
+  const time = clock(createdAtOf(message) ?? liveTime);
   const isPersonaReply = message.role === "assistant" && persona !== null;
   const bubbles = useMemo(() => {
     if (!isPersonaReply) return raw.trim() ? [raw] : [];
@@ -298,9 +353,10 @@ function MessageBubbles({
 
   if (message.role === "user") {
     return (
-      <Row role="user">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-accent px-5 py-3 text-white shadow-sm">{raw}</div>
-      </Row>
+      <div className="space-y-1.5">
+        {textParts(message).map((text, i) => <UserBubble key={i} text={text} />)}
+        {lastInRun && <Meta role="user">{[time, receipt].filter(Boolean).join(" · ")}</Meta>}
+      </div>
     );
   }
   // No text at all yet: the chat-level typing indicator covers this.
@@ -313,12 +369,26 @@ function MessageBubbles({
           <AssistantBubble text={text} plain={isPersonaReply} />
         </Row>
       ))}
+      {lastInRun && !waitingForNext && <Meta role="assistant">{time}</Meta>}
       {/* "Typing…" while the next bubble is being written or paced in. */}
       {waitingForNext && (
         <Row role="assistant" persona={persona} hideAvatar={continued || visible.length > 0}><Typing /></Row>
       )}
     </div>
   );
+}
+
+function UserBubble({ text }: { text: string }) {
+  return (
+    <Row role="user">
+      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-accent px-5 py-3 text-white shadow-sm">{text}</div>
+    </Row>
+  );
+}
+
+/** Small time / read-receipt line under the last bubble of a run. */
+function Meta({ role, children }: { role: "user" | "assistant"; children: React.ReactNode }) {
+  return <div className={`text-xs text-muted ${role === "user" ? "text-right" : "ml-[52px]"}`}>{children}</div>;
 }
 
 function AssistantBubble({ text, plain }: { text: string; plain: boolean }) {
