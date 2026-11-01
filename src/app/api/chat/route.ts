@@ -24,6 +24,7 @@ export const POST = route(async (req) => {
     conversation,
     content,
     model: isModelId(body.model) ? (body.model as ModelId) : undefined,
+    timezone: typeof body.timezone === "string" ? body.timezone.slice(0, 64) : undefined,
     abortSignal: req.signal,
   });
 

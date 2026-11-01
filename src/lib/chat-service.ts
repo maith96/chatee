@@ -2,7 +2,10 @@
 // Keeping it in one place means the later app gets exactly the same behaviour as the website.
 import { streamText } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { joinBubbles, splitBubbles } from "./bubbles";
 import { type ModelId } from "./models";
+import { getPersona, type Persona } from "./personas";
+import { buildPersonaPrompt, stageFromMessageCount } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
 
 export const SYSTEM_PROMPT =
@@ -98,13 +101,45 @@ export async function listMessages(db: SupabaseClient, conversationId: string) {
   return data as Message[];
 }
 
-async function insertMessage(
-  db: SupabaseClient,
-  row: { conversation_id: string; role: "user" | "assistant"; content: string; model?: string },
-) {
+type NewMessage = { conversation_id: string; role: "user" | "assistant"; content: string; model?: string; created_at?: string };
+
+async function insertMessage(db: SupabaseClient, row: NewMessage) {
   const { data, error } = await db.from("messages").insert(row).select(MESSAGE_FIELDS).single();
   if (error) throw error;
   return data as Message;
+}
+
+/** Saves several bubbles at once, 1ms apart so they keep their order. */
+async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
+  const start = Date.now();
+  const stamped = rows.map((r, i) => ({ ...r, created_at: new Date(start + i).toISOString() }));
+  const { data, error } = await db.from("messages").insert(stamped).select(MESSAGE_FIELDS);
+  if (error) throw error;
+  return (data as Message[]).sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+/** History for the model: consecutive assistant bubbles become one turn, in the bubble format. */
+function toModelMessages(messages: Message[]) {
+  const turns: { role: "user" | "assistant"; content: string }[] = [];
+  for (const m of messages) {
+    const prev = turns.at(-1);
+    if (prev && prev.role === m.role && m.role === "assistant") prev.content = joinBubbles([prev.content, m.content]);
+    else if (prev && prev.role === m.role) prev.content += `\n${m.content}`;
+    else turns.push({ role: m.role, content: m.content });
+  }
+  return turns;
+}
+
+/** The system prompt: the persona's if the chat has one, otherwise the plain assistant. */
+function systemPromptFor(persona: Persona | null, history: Message[], timezone?: string) {
+  if (!persona) return SYSTEM_PROMPT;
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  const minutesSinceLastUserMessage = lastUser ? (Date.now() - new Date(lastUser.created_at).getTime()) / 60000 : null;
+  return buildPersonaPrompt(persona.name, persona.definition, {
+    timezone,
+    minutesSinceLastUserMessage,
+    stage: stageFromMessageCount(history.filter((m) => m.role === "user").length),
+  });
 }
 
 /** Simple per-user rate limit backed by the messages table (works on serverless, no extra service). */
@@ -126,10 +161,15 @@ export async function isRateLimited(db: SupabaseClient) {
  */
 export async function startReply(
   db: SupabaseClient,
-  opts: { conversation: Conversation; content: string; model?: ModelId; abortSignal?: AbortSignal },
+  opts: { conversation: Conversation; content: string; model?: ModelId; timezone?: string; abortSignal?: AbortSignal },
 ) {
   const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
-  const history = await listMessages(db, opts.conversation.id);
+  const [history, persona] = await Promise.all([
+    listMessages(db, opts.conversation.id),
+    opts.conversation.persona_id ? getPersona(db, opts.conversation.persona_id) : Promise.resolve(null),
+  ]);
+  // Computed before the new message is saved, so "time since last message" is the real gap.
+  const instructions = systemPromptFor(persona, history, opts.timezone);
 
   // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
   const last = history.at(-1);
@@ -149,40 +189,44 @@ export async function startReply(
   }
 
   let streamError: unknown; // the real provider error (result.text only reports "no output")
-  let resolveSaved!: (m: Message | null) => void;
-  const saved = new Promise<Message | null>((r) => (resolveSaved = r));
+  let resolveSaved!: (m: Message[]) => void;
+  const saved = new Promise<Message[]>((r) => (resolveSaved = r));
 
   const result = streamText({
     model: languageModel,
     providerOptions,
-    instructions: SYSTEM_PROMPT,
-    messages: [...history.slice(-HISTORY_LIMIT), userMessage].map((m) => ({ role: m.role, content: m.content })),
+    instructions,
+    messages: toModelMessages([...history.slice(-HISTORY_LIMIT), userMessage]),
     abortSignal: opts.abortSignal,
     onEnd: async ({ text }) => {
       try {
+        // Persona replies can be several bubbles: one row each. The plain assistant keeps one row.
+        const parts = persona
+          ? splitBubbles(text, { paragraphs: persona.definition.communication.bubbles > 1 })
+          : text.trim()
+            ? [text]
+            : [];
         resolveSaved(
-          text.trim()
-            ? await insertMessage(db, {
-                conversation_id: opts.conversation.id,
-                role: "assistant",
-                content: text,
-                model: model.id,
-              })
-            : null,
+          parts.length
+            ? await insertMessages(
+                db,
+                parts.map((content) => ({ conversation_id: opts.conversation.id, role: "assistant", content, model: model.id })),
+              )
+            : [],
         );
       } catch (err) {
         console.error("Failed to save assistant message", err);
-        resolveSaved(null);
+        resolveSaved([]);
       }
     },
     onError: ({ error }) => {
       streamError = error;
       console.error("Model error", error);
-      resolveSaved(null);
+      resolveSaved([]);
     },
   });
 
-  return { result, userMessage, saved, model, getError: () => streamError };
+  return { result, userMessage, saved, model, persona, getError: () => streamError };
 }
 
 /** Turns provider errors into a message that is safe and useful to show users. */

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Conversation } from "@/lib/chat-service";
 import { DEFAULT_MODEL, type ModelId, type ModelInfo } from "@/lib/models";
+import type { PersonaSummary } from "@/lib/personas";
 import { signOut } from "@/app/login/actions";
+import { Avatar } from "./avatar";
 import { Logo } from "./logo";
 import { ChatView } from "./chat-view";
 import { ModelPicker } from "./model-picker";
@@ -38,6 +40,9 @@ export default function ChatApp({ email }: { email: string }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [defaultModel, setDefaultModel] = useState<ModelId>(DEFAULT_MODEL);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [personas, setPersonas] = useState<PersonaSummary[]>([]);
+  // For a new chat: undefined = still choosing, null = plain assistant, otherwise a persona.
+  const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,9 +65,15 @@ export default function ChatApp({ email }: { email: string }) {
         setModel(data.default);
       })
       .catch(() => {});
+    api<{ personas: PersonaSummary[] }>("/personas")
+      .then((data) => setPersonas(data.personas))
+      .catch(() => {});
   }, [refresh]);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
+  const personaById = (id: string | null | undefined) => (id ? (personas.find((p) => p.id === id) ?? null) : null);
+  const currentPersona = active ? personaById(active.persona_id) : (newChatPersona ?? null);
+  const choosing = !active && newChatPersona === undefined;
 
   function openConversation(c: Conversation) {
     setActiveId(c.id);
@@ -74,15 +85,24 @@ export default function ChatApp({ email }: { email: string }) {
   function newChat() {
     setActiveId(null);
     setPending(null);
+    setNewChatPersona(undefined);
     setSidebarOpen(false);
+  }
+
+  function choosePersona(p: PersonaSummary | null) {
+    setNewChatPersona(p);
+    if (!p) setModel(defaultModel);
   }
 
   // First message of a new chat: create the conversation, then let ChatView send the text.
   async function startConversation(text: string) {
+    // With a persona, let the server pick the persona's preferred model.
+    const persona = newChatPersona ?? null;
     const { conversation } = await api<{ conversation: Conversation }>("/conversations", {
       method: "POST",
-      body: JSON.stringify({ model }),
+      body: JSON.stringify(persona ? { persona_id: persona.id } : { model }),
     });
+    setModel(conversation.model);
     setConversations((list) => [conversation, ...list]);
     setPending({ id: conversation.id, text });
     setActiveId(conversation.id);
@@ -129,9 +149,14 @@ export default function ChatApp({ email }: { email: string }) {
           {conversations.map((c) => (
             <div key={c.id}
               className={`group flex items-center rounded-2xl ${c.id === activeId ? "bg-accent-soft" : "hover:bg-accent-soft/60"}`}>
-              <button onClick={() => openConversation(c)} className="min-w-0 flex-1 px-4 py-3 text-left">
-                <div className="truncate">{c.title}</div>
-                <div className="text-xs text-muted">{timeAgo(c.updated_at)}</div>
+              <button onClick={() => openConversation(c)} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left">
+                <Avatar persona={personaById(c.persona_id)} size="sm" />
+                <div className="min-w-0">
+                  <div className="truncate">{personaById(c.persona_id)?.name ?? c.title}</div>
+                  <div className="truncate text-xs text-muted">
+                    {personaById(c.persona_id) ? `${c.title} · ` : ""}{timeAgo(c.updated_at)}
+                  </div>
+                </div>
               </button>
               <div className="flex shrink-0 gap-1 pr-2 opacity-100 md:opacity-0 md:group-hover:opacity-100">
                 <IconButton label="Rename" onClick={() => rename(c)}>✎</IconButton>
@@ -157,23 +182,73 @@ export default function ChatApp({ email }: { email: string }) {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-border px-4 py-4 md:px-8">
           <button className="rounded-lg p-2 md:hidden" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>☰</button>
-          <div className="min-w-0 flex-1 truncate">
-            <span className="hidden text-muted sm:inline">Workspace / </span>
-            <span>{active?.title ?? "New conversation"}</span>
-          </div>
+          {currentPersona && !choosing ? (
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Avatar persona={currentPersona} size="sm" />
+              <div className="min-w-0">
+                <div className="truncate font-medium">{currentPersona.name}</div>
+                {currentPersona.tagline && <div className="truncate text-xs text-muted">{currentPersona.tagline}</div>}
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1 truncate">
+              <span className="hidden text-muted sm:inline">Workspace / </span>
+              <span>{choosing ? "New chat" : (active?.title ?? "New conversation")}</span>
+            </div>
+          )}
           <span className="hidden text-sm text-muted sm:inline">Model</span>
           <ModelPicker value={model} models={models} onChange={setModel} />
         </header>
 
+        {choosing ? (
+          <PersonaPicker personas={personas} onChoose={choosePersona} />
+        ) : (
         <ChatView
-          key={activeId ?? "new"}
+          key={activeId ?? `new-${newChatPersona?.id ?? "assistant"}`}
           conversationId={activeId}
+          persona={currentPersona}
           pendingText={pending?.id === activeId ? pending.text : undefined}
           model={model}
           onStart={startConversation}
           onReplied={refresh}
         />
+        )}
       </main>
+    </div>
+  );
+}
+
+function PersonaPicker({ personas, onChoose }: { personas: PersonaSummary[]; onChoose: (p: PersonaSummary | null) => void }) {
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-10 md:px-8">
+      <div className="mx-auto max-w-3xl">
+        <h2 className="text-center text-2xl font-semibold">Who do you want to talk to?</h2>
+        <p className="mt-2 text-center text-muted">Pick a character, or chat with the plain assistant.</p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          {personas.map((p) => (
+            <button key={p.id} onClick={() => onChoose(p)}
+              className="flex items-start gap-4 rounded-3xl border border-border bg-surface p-4 text-left transition hover:border-accent hover:shadow-sm">
+              <Avatar persona={p} size="lg" />
+              <div className="min-w-0 pt-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold">{p.name}</span>
+                  {p.is_romantic && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">romance</span>}
+                </div>
+                {p.tagline && <div className="text-sm text-muted">{p.tagline}</div>}
+                {p.bio && <p className="mt-2 line-clamp-3 text-sm">{p.bio}</p>}
+              </div>
+            </button>
+          ))}
+          <button onClick={() => onChoose(null)}
+            className="flex items-center gap-4 rounded-3xl border border-dashed border-border p-4 text-left hover:border-accent">
+            <Avatar persona={null} size="lg" />
+            <div>
+              <div className="text-lg font-semibold">Assistant</div>
+              <div className="text-sm text-muted">Helpful answers, no character.</div>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

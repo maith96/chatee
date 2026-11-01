@@ -9,10 +9,11 @@ type Params = { id: string };
 
 /**
  * POST /api/v1/conversations/{id}/messages
- * Body: { "content": string, "model"?: string, "stream"?: boolean }
+ * Body: { "content": string, "model"?: string, "stream"?: boolean, "timezone"?: "Europe/London" }
  *
- * stream=false (default): waits, returns JSON { user_message, assistant_message }.
- * stream=true: returns the reply as a plain-text stream (chunked), easiest to consume from any app.
+ * stream=false (default): waits, returns JSON { user_message, assistant_messages: [...] }.
+ *   Persona replies can be several chat bubbles: one message each.
+ * stream=true: returns the reply as a plain-text stream. Bubbles are separated by a line containing only "|||".
  */
 export const POST = route<Params>(async (req, { params }) => {
   const { id } = await params;
@@ -33,6 +34,7 @@ export const POST = route<Params>(async (req, { params }) => {
     conversation,
     content,
     model: body.model as ModelId | undefined,
+    timezone: typeof body.timezone === "string" ? body.timezone.slice(0, 64) : undefined,
     abortSignal: req.signal,
   });
 
@@ -47,11 +49,11 @@ export const POST = route<Params>(async (req, { params }) => {
   } catch (err) {
     return json(req, { error: { code: "generation_failed", message: friendlyError(getError() ?? err) } }, 502);
   }
-  const assistantMessage = await saved;
-  if (!assistantMessage) {
+  const assistantMessages = await saved;
+  if (!assistantMessages.length) {
     return json(req, { error: { code: "generation_failed", message: "The model returned an empty reply." } }, 502);
   }
-  return json(req, { user_message: userMessage, assistant_message: assistantMessage }, 201);
+  return json(req, { user_message: userMessage, assistant_messages: assistantMessages }, 201);
 });
 
 export const OPTIONS = preflight;

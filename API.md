@@ -111,17 +111,23 @@ Sends a message and gets the AI's reply. The server keeps the history, so send o
 
 Body:
 ```json
-{ "content": "Explain black holes simply", "model": "nova-fast", "stream": false }
+{ "content": "Explain black holes simply", "model": "nova-fast", "stream": false, "timezone": "Europe/London" }
 ```
+
+`timezone` (optional, IANA name from the device) lets personas react to the user's local time, e.g. noticing it's late.
 
 **`stream: false` (default)** waits for the full reply, then returns `201`:
 ```json
 { "user_message": { "id": "...", "role": "user", "content": "..." },
-  "assistant_message": { "id": "...", "role": "assistant", "content": "..." } }
+  "assistant_messages": [ { "id": "...", "role": "assistant", "content": "WAIT" },
+                          { "id": "...", "role": "assistant", "content": "you got the job??? 😭" } ] }
 ```
+Persona replies can be **several chat bubbles**; each is its own message (also in `GET /conversations/{id}`).
+Show them as separate bubbles, ideally with a short typing pause between them.
 
 **`stream: true`** returns the reply as **plain text, streamed in chunks** as it's generated
-(`Content-Type: text/plain`). The reply is saved when it finishes. Re-fetch the conversation for the saved IDs.
+(`Content-Type: text/plain`). For personas, bubbles are separated by a line containing only `|||`
+(blank lines can also start a new bubble). The reply is saved when it finishes. Re-fetch the conversation for the saved IDs.
 
 ```js
 const res = await fetch(`${BASE}/conversations/${id}/messages`, {
