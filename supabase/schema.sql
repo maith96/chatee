@@ -24,6 +24,13 @@ create index if not exists conversations_user_updated_idx on public.conversation
 create index if not exists messages_conversation_created_idx on public.messages (conversation_id, created_at);
 create index if not exists messages_user_created_idx on public.messages (user_id, created_at desc);
 
+-- Table privileges for signed-in users. Newer Supabase projects don't grant these
+-- automatically for tables created in SQL. Anonymous visitors get no access.
+-- (RLS below still limits each user to their own rows.)
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.conversations to authenticated;
+grant select, insert, update, delete on public.messages to authenticated;
+
 -- Row Level Security: every user can only see and change their own rows.
 -- This is what keeps the public API safe: requests run as the signed-in user.
 alter table public.conversations enable row level security;
