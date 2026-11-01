@@ -1,6 +1,7 @@
 // Server-only: turns a model entry into an AI SDK model, using whichever API keys are configured.
 import { createGoogle } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import type { streamText } from "ai";
 import { DEFAULT_MODEL, getModel, MODELS, type ModelId, type Provider } from "./models";
 
 // Reads GOOGLE_GENERATIVE_AI_API_KEY. The base URL override is optional (proxies, testing).
@@ -39,5 +40,10 @@ export function resolveModel(id: string | null | undefined) {
   const wanted = getModel(id ?? defaultModelId());
   const model = isProviderConfigured(wanted.provider) ? wanted : getModel(defaultModelId());
   const languageModel = model.provider === "google" ? google(model.providerModel) : nvidia.chatModel(model.providerModel);
-  return { model, languageModel };
+  // Extra request-body fields for this model (sent as provider options).
+  const extra = "body" in model ? model.body : undefined;
+  const providerOptions: Parameters<typeof streamText>[0]["providerOptions"] = extra
+    ? { [model.provider]: JSON.parse(JSON.stringify(extra)) }
+    : undefined;
+  return { model, languageModel, providerOptions };
 }

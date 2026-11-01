@@ -130,7 +130,10 @@ function ChatSession({ conversationId, pendingText, model, onStart, onReplied, i
 
           {messages.map((m) => <Bubble key={m.id} message={m} />)}
 
-          {(status === "submitted" || starting || (pendingText && messages.length === 0)) && (
+          {(status === "submitted" ||
+            starting ||
+            (pendingText && messages.length === 0) ||
+            (status === "streaming" && !messages.at(-1)?.parts.some((p) => p.type === "text" && p.text))) && (
             <Row role="assistant"><Typing /></Row>
           )}
 

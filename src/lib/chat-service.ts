@@ -120,7 +120,7 @@ export async function startReply(
   db: SupabaseClient,
   opts: { conversation: Conversation; content: string; model?: ModelId; abortSignal?: AbortSignal },
 ) {
-  const { model, languageModel } = resolveModel(opts.model ?? opts.conversation.model);
+  const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
   const history = await listMessages(db, opts.conversation.id);
 
   // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
@@ -146,6 +146,7 @@ export async function startReply(
 
   const result = streamText({
     model: languageModel,
+    providerOptions,
     instructions: SYSTEM_PROMPT,
     messages: [...history.slice(-HISTORY_LIMIT), userMessage].map((m) => ({ role: m.role, content: m.content })),
     abortSignal: opts.abortSignal,

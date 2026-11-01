@@ -4,26 +4,30 @@ export type Provider = "google" | "nvidia";
 
 export const MODELS = [
   // NVIDIA NIM (https://build.nvidia.com) — fast hosted open models. Needs NVIDIA_API_KEY.
+  // Speeds measured on the hosted API (time to first word). `body` adds extra request fields.
   {
     id: "nova-fast",
     name: "Nova Fast",
-    description: "NVIDIA Nemotron 3.5 Lightning. Very quick replies.",
+    description: "NVIDIA Nemotron 3.5 Lightning. Near-instant replies (~0.4s).",
     provider: "nvidia",
     providerModel: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    // Reasoning model: with thinking on it can spend the whole reply thinking. Off = fast, direct answers.
+    body: { chat_template_kwargs: { enable_thinking: false } },
   },
   {
     id: "nova-smart",
     name: "Nova Smart",
-    description: "DeepSeek V4.1 Flash on NVIDIA. Stronger reasoning, still fast.",
+    description: "NVIDIA Nemotron 3 Ultra (550B). Stronger answers, still quick (~2.5s).",
     provider: "nvidia",
-    providerModel: "deepseek-ai/deepseek-v4.1-flash",
+    providerModel: "nvidia/nemotron-3-ultra-550b-a55b",
+    body: { chat_template_kwargs: { enable_thinking: false } },
   },
   {
-    id: "nova-kimi",
-    name: "Nova Kimi",
-    description: "Kimi K2.6 on NVIDIA. Great for writing and long answers.",
+    id: "nova-deep",
+    name: "Nova Deep",
+    description: "MiniMax M3.1 Flash. Thinks before answering, for hard questions (~3-10s).",
     provider: "nvidia",
-    providerModel: "moonshotai/kimi-k2.6",
+    providerModel: "minimaxai/minimax-m3.1-flash",
   },
   // Google Gemini (free tier). Needs GOOGLE_GENERATIVE_AI_API_KEY.
   // "-latest" aliases always point at Google's current model, so they don't go stale.
@@ -54,6 +58,7 @@ export const MODELS = [
   description: string;
   provider: Provider;
   providerModel: string;
+  body?: Record<string, unknown>;
 }[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
