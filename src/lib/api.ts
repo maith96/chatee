@@ -72,9 +72,30 @@ export function route<P = Record<string, never>>(handler: Handler<P>): Handler<P
       if (err instanceof ConfigError) {
         return json(req, { error: { code: "server_misconfigured", message: err.message } }, 500);
       }
+      const db = describeDatabaseError(err);
+      if (db) return json(req, { error: { code: "database_error", message: db } }, 500);
       return json(req, { error: { code: "internal_error", message: "Unexpected server error." } }, 500);
     }
   };
+}
+
+/** Turns common Supabase/Postgres setup problems into an actionable message. */
+function describeDatabaseError(err: unknown): string | null {
+  if (!err || typeof err !== "object" || !("code" in err) || !("message" in err)) return null;
+  const { code, message } = err as { code?: string; message?: string };
+  if (code === "PGRST205" || code === "42P01" || /could not find the table|does not exist/i.test(message ?? "")) {
+    return "Database tables are missing. In Supabase, open SQL Editor and run supabase/schema.sql from the repo.";
+  }
+  if (code === "PGRST204" || code === "42703") {
+    return "Database tables are out of date. Re-run supabase/schema.sql in the Supabase SQL Editor.";
+  }
+  if (code === "42501") {
+    return "The database refused access (Row Level Security). Re-run supabase/schema.sql to restore the policies.";
+  }
+  if (code === "23503") {
+    return "Your account isn't fully set up in the database. Sign out and sign in again.";
+  }
+  return `Database error (${code}): ${message}`;
 }
 
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
