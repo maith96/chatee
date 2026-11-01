@@ -22,6 +22,13 @@ export default function LoginPage() {
           <input type="hidden" name="mode" value={mode} />
           <input name="email" type="email" required placeholder="you@example.com" autoComplete="email"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 outline-none focus:border-accent" />
+          {mode === "signup" && (
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">Date of birth (you must be 18+)</span>
+              <input name="birthdate" type="date" required max={new Date().toISOString().slice(0, 10)}
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 outline-none focus:border-accent" />
+            </label>
+          )}
           <input name="password" type="password" required minLength={6} placeholder="Password"
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 outline-none focus:border-accent" />

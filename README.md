@@ -13,6 +13,8 @@ model picker · starter prompts · stop and retry · friendly error messages · 
    - **Gemini (free tier):** https://aistudio.google.com → **Get API key**.
 2. **Supabase:** create a project at https://supabase.com.
    - **SQL Editor:** paste the contents of [`supabase/schema.sql`](./supabase/schema.sql) and click **Run**.
+     Then do the same with [`supabase/personas-seed.sql`](./supabase/personas-seed.sql) to load the built-in personas.
+     Both are safe to re-run, which is also how you upgrade after pulling new changes.
    - **Project Settings → API:** copy the **Project URL** and the **publishable** (or `anon`) key.
    - **Authentication → URL Configuration:** set **Site URL** to your app URL (e.g. `http://localhost:3000`, later your Vercel URL).
 
@@ -53,7 +55,26 @@ src/
     supabase/                        # Supabase clients
   proxy.ts                           # keeps the login session fresh; redirects signed-out users
 supabase/schema.sql                  # tables + Row Level Security
+supabase/personas-seed.sql           # built-in personas (generated, don't edit)
+personas/*.json                      # built-in persona character sheets (source of truth)
+public/avatars/                      # built-in persona avatars
 ```
+
+## Personas
+
+Each persona is a structured character sheet (`src/lib/persona-schema.ts`): identity, personality,
+behaviour rules, communication style with situational examples, knowledge, and relationship.
+Built-in personas live in `personas/*.json`. After editing one:
+
+```bash
+npm run personas:seed   # validates the JSON and regenerates supabase/personas-seed.sql
+```
+
+Then run `supabase/personas-seed.sql` in the Supabase SQL Editor.
+
+**Rules enforced in the database:** every persona is 18+; users can only edit their own personas;
+private personas are visible only to their owner; unlisted ones are viewable by link.
+All app users must confirm they're 18+ (date of birth at sign-up; only the confirmation is stored).
 
 ## Customizing
 

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "personas:seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-persona-seed.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.109",

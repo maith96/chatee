@@ -1,5 +1,6 @@
 // Helpers for the public, versioned API (/api/v1). Used by the website AND your later app.
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isAdultConfirmed } from "./age";
 import { ConfigError } from "./env";
 import { createClient, createClientWithToken } from "./supabase/server";
 
@@ -17,11 +18,25 @@ export const errors = {
   unauthorized: () => new ApiError(401, "unauthorized", "Sign in, or send a valid 'Authorization: Bearer <token>' header."),
   notFound: (what = "Resource") => new ApiError(404, "not_found", `${what} not found.`),
   badRequest: (message: string) => new ApiError(400, "bad_request", message),
+  ageRequired: () =>
+    new ApiError(403, "age_confirmation_required", "Confirm you're 18 or older first: POST /api/v1/me/age { birthdate }."),
   rateLimited: () => new ApiError(429, "rate_limited", "Too many messages. Please wait a minute."),
 };
 
-/** Works with a Bearer token (mobile/other apps) or the website's session cookie. */
-export async function authenticate(req: Request): Promise<{ db: SupabaseClient; user: User }> {
+/**
+ * Works with a Bearer token (mobile/other apps) or the website's session cookie.
+ * Every endpoint requires a confirmed adult (18+) unless `requireAdult: false`.
+ */
+export async function authenticate(
+  req: Request,
+  { requireAdult = true }: { requireAdult?: boolean } = {},
+): Promise<{ db: SupabaseClient; user: User }> {
+  const session = await getSession(req);
+  if (requireAdult && !(await isAdultConfirmed(session.db, session.user))) throw errors.ageRequired();
+  return session;
+}
+
+async function getSession(req: Request): Promise<{ db: SupabaseClient; user: User }> {
   const header = req.headers.get("authorization");
   if (header?.toLowerCase().startsWith("bearer ")) {
     const token = header.slice(7).trim();

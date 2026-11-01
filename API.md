@@ -40,6 +40,7 @@ All errors have the same shape:
 |---|---|---|
 | 400 | `bad_request` | Invalid body or parameters |
 | 401 | `unauthorized` | Missing, invalid or expired token |
+| 403 | `age_confirmation_required` | The user hasn't confirmed they're 18+ yet (see `POST /me/age`) |
 | 404 | `not_found` | It doesn't exist, or it isn't yours |
 | 429 | `rate_limited` | Too many messages per minute (default 15) |
 | 502 | `generation_failed` | The AI provider failed (e.g. rate limit hit); safe to retry |
@@ -56,8 +57,25 @@ Only models whose provider is configured on the server are listed.
 
 ### `GET /me`
 ```json
-{ "user": { "id": "uuid", "email": "you@example.com", "created_at": "..." } }
+{ "user": { "id": "uuid", "email": "you@example.com", "created_at": "...", "adult_confirmed": true } }
 ```
+
+### `POST /me/age`
+Persona is 18+ only. Every other endpoint (except `/me` and `/models`) returns `403 age_confirmation_required`
+until the user confirms. Body: `{ "birthdate": "YYYY-MM-DD" }` → `{ "adult_confirmed": true }`, or `400` if under 18.
+Only the confirmation is stored, never the birthdate.
+
+### `GET /personas`
+Built-in and public personas, plus your own.
+```json
+{ "personas": [ { "id": "uuid", "name": "Elena", "tagline": "...", "avatar_url": "/avatars/elena.webp",
+                  "avatar_emoji": "📚", "visibility": "public", "is_romantic": true, "is_builtin": true,
+                  "is_mine": false, "bio": "...", "role": "slow-burn romantic interest" } ] }
+```
+Relative `avatar_url`s are on the same host as the API (e.g. `https://<your-app>.vercel.app/avatars/elena.webp`).
+
+### `GET /personas/{id}`
+One persona, including its full character sheet in `definition`.
 
 ### `GET /conversations?limit=50`
 The newest first (max 100).
@@ -67,7 +85,8 @@ The newest first (max 100).
 ```
 
 ### `POST /conversations`
-Body (all optional): `{ "title": "My chat", "model": "nova-smart" }` → `201`
+Body (all optional): `{ "persona_id": "uuid", "title": "My chat", "model": "nova-smart" }` → `201`.
+Without `model`, the persona's preferred model is used. Conversations include `persona_id`.
 ```json
 { "conversation": { "id": "uuid", "title": "New conversation", ... } }
 ```

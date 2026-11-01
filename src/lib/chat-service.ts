@@ -16,6 +16,7 @@ export type Conversation = {
   id: string;
   title: string;
   model: ModelId;
+  persona_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -29,7 +30,7 @@ export type Message = {
   created_at: string;
 };
 
-const CONVERSATION_FIELDS = "id, title, model, created_at, updated_at";
+const CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at";
 const MESSAGE_FIELDS = "id, conversation_id, role, content, model, created_at";
 export const DEFAULT_TITLE = "New conversation";
 
@@ -51,10 +52,17 @@ export async function getConversation(db: SupabaseClient, id: string) {
   return data as Conversation | null;
 }
 
-export async function createConversation(db: SupabaseClient, input: { title?: string; model?: ModelId }) {
+export async function createConversation(
+  db: SupabaseClient,
+  input: { title?: string; model?: ModelId; personaId?: string | null },
+) {
   const { data, error } = await db
     .from("conversations")
-    .insert({ title: input.title?.trim() || DEFAULT_TITLE, model: resolveModel(input.model ?? defaultModelId()).model.id })
+    .insert({
+      title: input.title?.trim() || DEFAULT_TITLE,
+      model: resolveModel(input.model ?? defaultModelId()).model.id,
+      persona_id: input.personaId ?? null,
+    })
     .select(CONVERSATION_FIELDS)
     .single();
   if (error) throw error;
