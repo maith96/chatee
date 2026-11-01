@@ -139,6 +139,7 @@ function systemPromptFor(persona: Persona | null, history: Message[], timezone?:
     timezone,
     minutesSinceLastUserMessage,
     stage: stageFromMessageCount(history.filter((m) => m.role === "user").length),
+    turn: history.filter((m) => m.role === "user").length,
   });
 }
 
