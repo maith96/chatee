@@ -1,5 +1,6 @@
 // Helpers for the public, versioned API (/api/v1). Used by the website AND your later app.
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { ConfigError } from "./env";
 import { createClient, createClientWithToken } from "./supabase/server";
 
 export class ApiError extends Error {
@@ -68,6 +69,9 @@ export function route<P = Record<string, never>>(handler: Handler<P>): Handler<P
         return json(req, { error: { code: err.code, message: err.message } }, err.status);
       }
       console.error(err);
+      if (err instanceof ConfigError) {
+        return json(req, { error: { code: "server_misconfigured", message: err.message } }, 500);
+      }
       return json(req, { error: { code: "internal_error", message: "Unexpected server error." } }, 500);
     }
   };

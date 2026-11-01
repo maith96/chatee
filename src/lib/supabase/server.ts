@@ -1,14 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-
-const url = () => process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const key = () => process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+import { supabaseEnv } from "../env";
 
 /** Supabase client for the web app: the user's session lives in cookies. */
 export async function createClient() {
+  const { url, key } = supabaseEnv();
   const cookieStore = await cookies();
-  return createServerClient(url(), key(), {
+  return createServerClient(url, key, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(cookiesToSet) {
@@ -24,7 +23,8 @@ export async function createClient() {
 
 /** Supabase client for API callers (mobile/other apps) that send `Authorization: Bearer <access token>`. */
 export function createClientWithToken(accessToken: string) {
-  return createSupabaseClient(url(), key(), {
+  const { url, key } = supabaseEnv();
+  return createSupabaseClient(url, key, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
