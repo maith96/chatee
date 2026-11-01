@@ -1,5 +1,6 @@
 import { assertUuid, authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { friendlyError, getConversation, isRateLimited, MAX_MESSAGE_CHARS, startReply } from "@/lib/chat-service";
+import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
 
 export const maxDuration = 60;
@@ -22,13 +23,13 @@ export const POST = route<Params>(async (req, { params }) => {
   const content = typeof body.content === "string" ? body.content.trim() : "";
   if (!content) throw errors.badRequest("'content' is required.");
   if (content.length > MAX_MESSAGE_CHARS) throw errors.badRequest(`'content' is longer than ${MAX_MESSAGE_CHARS} characters.`);
-  if (body.model !== undefined && !isModelId(body.model)) throw errors.badRequest("Unknown 'model'. See GET /api/v1/models.");
+  if (body.model !== undefined && (!isModelId(body.model) || !isModelAvailable(body.model))) throw errors.badRequest("Unknown or unavailable 'model'. See GET /api/v1/models.");
 
   const conversation = await getConversation(db, id);
   if (!conversation) throw errors.notFound("Conversation");
   if (await isRateLimited(db)) throw errors.rateLimited();
 
-  const { result, userMessage, saved } = await startReply(db, {
+  const { result, userMessage, saved, getError } = await startReply(db, {
     conversation,
     content,
     model: body.model as ModelId | undefined,
@@ -44,7 +45,7 @@ export const POST = route<Params>(async (req, { params }) => {
   try {
     await result.text;
   } catch (err) {
-    return json(req, { error: { code: "generation_failed", message: friendlyError(err) } }, 502);
+    return json(req, { error: { code: "generation_failed", message: friendlyError(getError() ?? err) } }, 502);
   }
   const assistantMessage = await saved;
   if (!assistantMessage) {

@@ -1,28 +1,66 @@
-// Display names -> Gemini model IDs. Shared by the web UI and the public API.
-// "-latest" aliases always point at Google's current model, so they don't go stale.
+// Display names -> provider model IDs. Shared by the web UI and the public API.
+// A model only shows up when its provider's API key is set on the server (see providers.ts).
+export type Provider = "google" | "nvidia";
+
 export const MODELS = [
+  // NVIDIA NIM (https://build.nvidia.com) — fast hosted open models. Needs NVIDIA_API_KEY.
+  {
+    id: "nova-fast",
+    name: "Nova Fast",
+    description: "NVIDIA Nemotron 3.5 Lightning. Very quick replies.",
+    provider: "nvidia",
+    providerModel: "nvidia/nemotron-3.5-lightning-30b-a3b",
+  },
+  {
+    id: "nova-smart",
+    name: "Nova Smart",
+    description: "DeepSeek V4.1 Flash on NVIDIA. Stronger reasoning, still fast.",
+    provider: "nvidia",
+    providerModel: "deepseek-ai/deepseek-v4.1-flash",
+  },
+  {
+    id: "nova-kimi",
+    name: "Nova Kimi",
+    description: "Kimi K2.6 on NVIDIA. Great for writing and long answers.",
+    provider: "nvidia",
+    providerModel: "moonshotai/kimi-k2.6",
+  },
+  // Google Gemini (free tier). Needs GOOGLE_GENERATIVE_AI_API_KEY.
+  // "-latest" aliases always point at Google's current model, so they don't go stale.
   {
     id: "terra-fast",
     name: "Terra Fast",
-    description: "Quick, capable answers for everyday chat.",
-    gemini: "gemini-flash-latest",
+    description: "Gemini Flash. Capable answers for everyday chat.",
+    provider: "google",
+    providerModel: "gemini-flash-latest",
   },
   {
     id: "terra-lite",
     name: "Terra Lite",
-    description: "Fastest and lightest. Highest free-tier limits.",
-    gemini: "gemini-flash-lite-latest",
+    description: "Gemini Flash-Lite. Lightest Gemini, highest free limits.",
+    provider: "google",
+    providerModel: "gemini-flash-lite-latest",
   },
   {
     id: "terra-pro",
     name: "Terra Pro",
-    description: "Best reasoning. Lower free-tier limits (may need billing).",
-    gemini: "gemini-pro-latest",
+    description: "Gemini Pro. Best Gemini reasoning, lower free limits.",
+    provider: "google",
+    providerModel: "gemini-pro-latest",
   },
-] as const;
+] as const satisfies readonly {
+  id: string;
+  name: string;
+  description: string;
+  provider: Provider;
+  providerModel: string;
+}[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
-export const DEFAULT_MODEL: ModelId = "terra-fast";
+export type ModelInfo = { id: ModelId; name: string; description: string };
+
+/** First choice when nothing is selected; the server falls back further if its key is missing. */
+export const DEFAULT_MODEL: ModelId = "nova-fast";
 
 export function getModel(id: string | null | undefined) {
   return MODELS.find((m) => m.id === id) ?? MODELS.find((m) => m.id === DEFAULT_MODEL)!;

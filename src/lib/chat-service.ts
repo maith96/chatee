@@ -1,9 +1,9 @@
 // Shared chat logic used by BOTH the web app (/api/chat) and the public API (/api/v1).
 // Keeping it in one place means the later app gets exactly the same behaviour as the website.
-import { createGoogle } from "@ai-sdk/google";
 import { streamText } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getModel, type ModelId } from "./models";
+import { type ModelId } from "./models";
+import { defaultModelId, resolveModel } from "./providers";
 
 export const SYSTEM_PROMPT =
   "You are Persona, a friendly and helpful AI assistant. Answer clearly and concisely. " +
@@ -11,9 +11,6 @@ export const SYSTEM_PROMPT =
 
 export const MAX_MESSAGE_CHARS = 8000;
 const HISTORY_LIMIT = 40; // how many past messages are sent to the model
-
-// Reads GOOGLE_GENERATIVE_AI_API_KEY. The base URL override is optional (proxies, testing).
-const google = createGoogle({ baseURL: process.env.GOOGLE_GENERATIVE_AI_BASE_URL || undefined });
 
 export type Conversation = {
   id: string;
@@ -57,7 +54,7 @@ export async function getConversation(db: SupabaseClient, id: string) {
 export async function createConversation(db: SupabaseClient, input: { title?: string; model?: ModelId }) {
   const { data, error } = await db
     .from("conversations")
-    .insert({ title: input.title?.trim() || DEFAULT_TITLE, model: getModel(input.model).id })
+    .insert({ title: input.title?.trim() || DEFAULT_TITLE, model: resolveModel(input.model ?? defaultModelId()).model.id })
     .select(CONVERSATION_FIELDS)
     .single();
   if (error) throw error;
@@ -123,7 +120,7 @@ export async function startReply(
   db: SupabaseClient,
   opts: { conversation: Conversation; content: string; model?: ModelId; abortSignal?: AbortSignal },
 ) {
-  const model = getModel(opts.model ?? opts.conversation.model);
+  const { model, languageModel } = resolveModel(opts.model ?? opts.conversation.model);
   const history = await listMessages(db, opts.conversation.id);
 
   // Retry-safe: if the last saved message is this same user message (its reply failed), reuse it.
@@ -143,11 +140,12 @@ export async function startReply(
     await updateConversation(db, opts.conversation.id, { model: model.id });
   }
 
+  let streamError: unknown; // the real provider error (result.text only reports "no output")
   let resolveSaved!: (m: Message | null) => void;
   const saved = new Promise<Message | null>((r) => (resolveSaved = r));
 
   const result = streamText({
-    model: google(model.gemini),
+    model: languageModel,
     instructions: SYSTEM_PROMPT,
     messages: [...history.slice(-HISTORY_LIMIT), userMessage].map((m) => ({ role: m.role, content: m.content })),
     abortSignal: opts.abortSignal,
@@ -169,19 +167,29 @@ export async function startReply(
       }
     },
     onError: ({ error }) => {
-      console.error("Gemini error", error);
+      streamError = error;
+      console.error("Model error", error);
       resolveSaved(null);
     },
   });
 
-  return { result, userMessage, saved, model };
+  return { result, userMessage, saved, model, getError: () => streamError };
 }
 
 /** Turns provider errors into a message that is safe and useful to show users. */
 export function friendlyError(error: unknown): string {
-  const text = error instanceof Error ? error.message : String(error);
-  if (/quota|rate|429|exhausted/i.test(text)) return "The free Gemini quota was hit. Wait a minute and try again.";
-  if (/api key|permission|401|403/i.test(text)) return "The Gemini API key is missing or invalid on the server.";
-  if (/not found|404/i.test(text)) return "That model isn't available for this API key. Try another model.";
+  // Retry errors wrap the real one; prefer the last underlying error.
+  const inner = (error as { lastError?: unknown })?.lastError ?? error;
+  const status = (inner as { statusCode?: number })?.statusCode;
+  const text = inner instanceof Error ? inner.message : String(inner);
+
+  if (status === 401 || status === 403 || /api key|unauthori[sz]ed|forbidden/i.test(text))
+    return "The AI provider's API key is missing or invalid on the server.";
+  if (status === 429 || /quota|rate.?limit|exhausted|too many requests/i.test(text))
+    return "The AI provider's rate limit was hit. Wait a minute or switch models.";
+  if (status === 404 || /model.*not found/i.test(text))
+    return "That model isn't available for this API key. Try another model.";
+  if ((status && status >= 500) || /timeout|timed out|overloaded|unavailable/i.test(text))
+    return "The model is busy right now. Try again or pick another model.";
   return "Something went wrong while generating a reply. Please try again.";
 }

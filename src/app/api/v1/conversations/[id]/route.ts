@@ -1,5 +1,6 @@
 import { assertUuid, authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { deleteConversation, getConversation, listMessages, updateConversation } from "@/lib/chat-service";
+import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
 
 type Params = { id: string };
@@ -26,7 +27,7 @@ export const PATCH = route<Params>(async (req, { params }) => {
     patch.title = body.title.trim().slice(0, 120);
   }
   if (body.model !== undefined) {
-    if (!isModelId(body.model)) throw errors.badRequest("Unknown 'model'. See GET /api/v1/models.");
+    if (!isModelId(body.model) || !isModelAvailable(body.model)) throw errors.badRequest("Unknown or unavailable 'model'. See GET /api/v1/models.");
     patch.model = body.model;
   }
   if (!Object.keys(patch).length) throw errors.badRequest("Nothing to update. Send 'title' and/or 'model'.");

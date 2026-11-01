@@ -1,5 +1,6 @@
 import { authenticate, errors, json, preflight, readJson, route } from "@/lib/api";
 import { createConversation, listConversations } from "@/lib/chat-service";
+import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
 
 // GET /api/v1/conversations?limit=50 — newest first.
@@ -14,7 +15,7 @@ export const POST = route(async (req) => {
   const { db } = await authenticate(req);
   const body = await readJson(req);
   if (body.title !== undefined && typeof body.title !== "string") throw errors.badRequest("'title' must be a string.");
-  if (body.model !== undefined && !isModelId(body.model)) throw errors.badRequest("Unknown 'model'. See GET /api/v1/models.");
+  if (body.model !== undefined && (!isModelId(body.model) || !isModelAvailable(body.model))) throw errors.badRequest("Unknown or unavailable 'model'. See GET /api/v1/models.");
   const conversation = await createConversation(db, {
     title: (body.title as string | undefined)?.slice(0, 120),
     model: body.model as ModelId | undefined,

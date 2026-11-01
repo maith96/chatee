@@ -1,11 +1,11 @@
 import { json, preflight, route } from "@/lib/api";
-import { DEFAULT_MODEL, MODELS } from "@/lib/models";
+import { availableModels, defaultModelId } from "@/lib/providers";
 
-// GET /api/v1/models — public; lists the models users can pick.
+// GET /api/v1/models — public; lists the models users can pick (only providers with a key set).
 export const GET = route(async (req) =>
   json(req, {
-    default: DEFAULT_MODEL,
-    models: MODELS.map(({ id, name, description }) => ({ id, name, description })),
+    default: defaultModelId(),
+    models: availableModels().map(({ id, name, description }) => ({ id, name, description })),
   }),
 );
 export const OPTIONS = preflight;

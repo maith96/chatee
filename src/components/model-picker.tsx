@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getModel, MODELS, type ModelId } from "@/lib/models";
+import { getModel, type ModelId, type ModelInfo } from "@/lib/models";
 
-export function ModelPicker({ value, onChange }: { value: ModelId; onChange: (id: ModelId) => void }) {
+export function ModelPicker({
+  value,
+  models,
+  onChange,
+}: {
+  value: ModelId;
+  models: ModelInfo[];
+  onChange: (id: ModelId) => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -23,7 +31,8 @@ export function ModelPicker({ value, onChange }: { value: ModelId; onChange: (id
       </button>
       {open && (
         <ul role="listbox" className="absolute right-0 z-10 mt-2 w-72 rounded-2xl border border-border bg-surface p-2 shadow-lg">
-          {MODELS.map((m) => (
+          {models.length === 0 && <li className="px-3 py-2 text-sm text-muted">No models configured.</li>}
+          {models.map((m) => (
             <li key={m.id}>
               <button role="option" aria-selected={m.id === value}
                 onClick={() => { onChange(m.id); setOpen(false); }}

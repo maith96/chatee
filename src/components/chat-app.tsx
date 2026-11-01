@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Conversation } from "@/lib/chat-service";
-import { DEFAULT_MODEL, type ModelId } from "@/lib/models";
+import { DEFAULT_MODEL, type ModelId, type ModelInfo } from "@/lib/models";
 import { signOut } from "@/app/login/actions";
 import { Logo } from "./logo";
 import { ChatView } from "./chat-view";
@@ -35,6 +35,8 @@ export default function ChatApp({ email }: { email: string }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string; text: string } | null>(null);
   const [model, setModel] = useState<ModelId>(DEFAULT_MODEL);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [defaultModel, setDefaultModel] = useState<ModelId>(DEFAULT_MODEL);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -50,13 +52,21 @@ export default function ChatApp({ email }: { email: string }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
     refresh();
+    // Only models whose provider has an API key on the server.
+    api<{ default: ModelId; models: ModelInfo[] }>("/models")
+      .then((data) => {
+        setModels(data.models);
+        setDefaultModel(data.default);
+        setModel(data.default);
+      })
+      .catch(() => {});
   }, [refresh]);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
 
   function openConversation(c: Conversation) {
     setActiveId(c.id);
-    setModel(c.model);
+    setModel(models.some((m) => m.id === c.model) ? c.model : defaultModel);
     setPending(null);
     setSidebarOpen(false);
   }
@@ -152,7 +162,7 @@ export default function ChatApp({ email }: { email: string }) {
             <span>{active?.title ?? "New conversation"}</span>
           </div>
           <span className="hidden text-sm text-muted sm:inline">Model</span>
-          <ModelPicker value={model} onChange={setModel} />
+          <ModelPicker value={model} models={models} onChange={setModel} />
         </header>
 
         <ChatView

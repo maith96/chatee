@@ -42,15 +42,16 @@ All errors have the same shape:
 | 401 | `unauthorized` | Missing, invalid or expired token |
 | 404 | `not_found` | It doesn't exist, or it isn't yours |
 | 429 | `rate_limited` | Too many messages per minute (default 15) |
-| 502 | `generation_failed` | Gemini failed (e.g. free quota hit); safe to retry |
+| 502 | `generation_failed` | The AI provider failed (e.g. rate limit hit); safe to retry |
 | 500 | `internal_error` | Unexpected server error |
 
 ## Endpoints
 
 ### `GET /models` (no auth needed)
+Only models whose provider is configured on the server are listed.
 ```json
-{ "default": "terra-fast",
-  "models": [ { "id": "terra-fast", "name": "Terra Fast", "description": "..." }, ... ] }
+{ "default": "nova-fast",
+  "models": [ { "id": "nova-fast", "name": "Nova Fast", "description": "..." }, ... ] }
 ```
 
 ### `GET /me`
@@ -66,7 +67,7 @@ The newest first (max 100).
 ```
 
 ### `POST /conversations`
-Body (all optional): `{ "title": "My chat", "model": "terra-lite" }` → `201`
+Body (all optional): `{ "title": "My chat", "model": "nova-smart" }` → `201`
 ```json
 { "conversation": { "id": "uuid", "title": "New conversation", ... } }
 ```
@@ -91,7 +92,7 @@ Sends a message and gets the AI's reply. The server keeps the history, so send o
 
 Body:
 ```json
-{ "content": "Explain black holes simply", "model": "terra-fast", "stream": false }
+{ "content": "Explain black holes simply", "model": "nova-fast", "stream": false }
 ```
 
 **`stream: false` (default)** waits for the full reply, then returns `201`:

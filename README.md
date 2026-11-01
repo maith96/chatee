@@ -1,6 +1,6 @@
 # Persona
 
-An AI chat app built with **Next.js + Vercel AI SDK + Gemini (free tier) + Supabase**, hosted on Vercel.
+An AI chat app built with **Next.js + Vercel AI SDK + NVIDIA NIM and/or Gemini + Supabase**, hosted on Vercel.
 It includes a **public REST API** (`/api/v1`) so a later app (mobile, desktop, another site) can use the same accounts and chats. See [API.md](./API.md).
 
 **Features:** streaming replies · Markdown and code blocks with copy buttons · chats saved per user · auto-titled, renameable and deletable chats ·
@@ -8,7 +8,9 @@ model picker · starter prompts · stop and retry · friendly error messages · 
 
 ## 1. Get your keys (free)
 
-1. **Gemini:** go to https://aistudio.google.com, then **Get API key**.
+1. **AI provider (one or both):**
+   - **NVIDIA NIM (fast):** https://build.nvidia.com → open any model → **Get API Key** (starts with `nvapi-`).
+   - **Gemini (free tier):** https://aistudio.google.com → **Get API key**.
 2. **Supabase:** create a project at https://supabase.com.
    - **SQL Editor:** paste the contents of [`supabase/schema.sql`](./supabase/schema.sql) and click **Run**.
    - **Project Settings → API:** copy the **Project URL** and the **publishable** (or `anon`) key.
@@ -56,11 +58,13 @@ supabase/schema.sql                  # tables + Row Level Security
 ## Customizing
 
 - **Personality:** edit `SYSTEM_PROMPT` in `src/lib/chat-service.ts`.
-- **Models:** edit `src/lib/models.ts`. The `-latest` aliases always use Google's current models.
+- **Models:** edit `src/lib/models.ts`. NVIDIA models use IDs from https://build.nvidia.com; Gemini uses `-latest` aliases.
+  A model only shows up if its provider's key is set. The default is Nova Fast (falls back to Gemini if there's no NVIDIA key).
 - **Rate limit:** set `RATE_LIMIT_PER_MINUTE` (default 15 messages per user per minute).
 - **Colors:** the CSS variables at the top of `src/app/globals.css`.
 
 ## Free-tier notes
 
 - Gemini's free tier has per-minute and per-day limits, and Google may use free-tier prompts to improve its products. Don't send sensitive data.
-- The Gemini key stays on the server. Users never see it.
+- API keys stay on the server. Users never see them.
+- NVIDIA's hosted NIM API is meant for development and prototyping, with per-key rate limits.
