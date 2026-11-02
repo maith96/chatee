@@ -672,5 +672,58 @@ grant execute on function public.news_stats(integer) to authenticated;
 -- then redeploy. Keep it private (anyone with it could write news).
 --   select value from private.settings where name = 'news_ingest_key';
 
+-- =====================================================================
+-- v8: Strangers (AI people who message users first). Safe to re-run.
+-- A shared pool, drafted in the Stranger Studio (/admin/strangers) and approved by an admin.
+-- Lifecycle: draft (admins only) -> trial / active (reachable by everyone, never in the persona picker) -> retired.
+-- =====================================================================
+alter table public.personas
+  add column if not exists kind          text not null default 'persona',
+  add column if not exists status        text not null default 'active',
+  add column if not exists tags          jsonb not null default '{}',
+  add column if not exists images        text[] not null default '{}',
+  add column if not exists image_prompts jsonb;
+do $$ begin
+  alter table public.personas add constraint personas_kind check (kind in ('persona', 'stranger'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.personas add constraint personas_status check (status in ('draft', 'trial', 'active', 'retired'));
+exception when duplicate_object then null; end $$;
+create index if not exists personas_strangers_idx on public.personas (status) where kind = 'stranger';
+
+-- Admins can see drafts; everyone else sees what they could before.
+drop policy if exists "read personas" on public.personas;
+create policy "read personas" on public.personas
+  for select using (visibility in ('public', 'unlisted') or owner_id = auth.uid() or (kind = 'stranger' and public.is_admin()));
+-- Only admins create and manage strangers (they belong to no user).
+drop policy if exists "admins manage strangers" on public.personas;
+create policy "admins manage strangers" on public.personas
+  for all using (kind = 'stranger' and public.is_admin())
+  with check (kind = 'stranger' and owner_id is null and public.is_admin());
+
+-- Users' own personas are always kind 'persona' (strangers belong to no one).
+drop policy if exists "insert own personas" on public.personas;
+create policy "insert own personas" on public.personas
+  for insert with check (owner_id = auth.uid() and kind = 'persona');
+drop policy if exists "update own personas" on public.personas;
+create policy "update own personas" on public.personas
+  for update using (owner_id = auth.uid()) with check (owner_id = auth.uid() and kind = 'persona');
+
+-- Photos for strangers (and later other personas): public to view, only admins can upload or delete.
+insert into storage.buckets (id, name, public) values ('persona-images', 'persona-images', true)
+on conflict (id) do update set public = true;
+drop policy if exists "read persona images" on storage.objects;
+create policy "read persona images" on storage.objects
+  for select to authenticated, anon using (bucket_id = 'persona-images');
+drop policy if exists "admins upload persona images" on storage.objects;
+create policy "admins upload persona images" on storage.objects
+  for insert to authenticated with check (bucket_id = 'persona-images' and public.is_admin());
+drop policy if exists "admins change persona images" on storage.objects;
+create policy "admins change persona images" on storage.objects
+  for update to authenticated using (bucket_id = 'persona-images' and public.is_admin());
+drop policy if exists "admins delete persona images" on storage.objects;
+create policy "admins delete persona images" on storage.objects
+  for delete to authenticated using (bucket_id = 'persona-images' and public.is_admin());
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

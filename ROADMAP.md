@@ -33,7 +33,11 @@ Personas only know the world up to the model's training date. Give them fresh ne
   - Track whether the user engages when a persona mentions an item (replies about it, writes more, keeps the topic going) and build per-user topic/region weights from that. Metadata only, resettable.
   - A setting lets the user choose regions/topics explicitly; it overrides the learning.
 
-## 🔜 Next: Strangers (AI people who message you first)
+## 🚧 In progress: Strangers (AI people who message you first)
+
+- ✅ Part 1: Stranger Studio (drafts that fill pool gaps, image prompts, photo upload, approval lifecycle)
+- 🔜 Part 2: inbox with message requests, "Meet someone new", strangers texting first, profile galleries
+- 🔜 Part 3: matching to similar users (80/20), leaderboard
 
 A WhatsApp-like experience where AI "strangers" DM the user to get to know them or just talk, and the user can also start a chat with a random new one.
 

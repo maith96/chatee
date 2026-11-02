@@ -39,7 +39,10 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
     <main className="mx-auto max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <Link href="/" className="text-sm text-accent hover:underline">← Back to chats</Link>
+          <div className="flex gap-4 text-sm">
+            <Link href="/" className="text-accent hover:underline">← Back to chats</Link>
+            <Link href="/admin/strangers" className="text-accent hover:underline">Stranger Studio</Link>
+          </div>
           <h1 className="mt-2 text-2xl font-semibold">Persona stats</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             Counts and averages only, from reply metadata (no message text). Messages around a crisis are left out.

@@ -136,6 +136,16 @@ model, and writes a review page to `evals/reports/latest.html`. Run it after cha
 private personas are visible only to their owner; unlisted ones are viewable by link.
 All app users must confirm they're 18+ (date of birth at sign-up; only the confirmation is stored).
 
+## Strangers (part 1: Stranger Studio)
+
+AI "strangers" come from a shared pool that admins build at **`/admin/strangers`** (`src/lib/strangers.ts`):
+**Draft** creates 1–10 strangers that fill gaps in the pool (gender × age band × region, weighted towards Kenya and
+Africa). Each has a validated character sheet (18+, never romantic), tags for matching, opening messages, and image
+prompts (a main photo, then "same person" variants). Make the photos, upload them (shrunk to WebP in the browser,
+stored in the public `persona-images` bucket, only admins can write), then **Approve → trial**, **Make active** or
+**Retire**. Drafts are admin-only; approved strangers never appear in the persona picker. Part 2 (inbox, "Meet someone
+new", strangers texting first) and part 3 (matching, leaderboard) are next.
+
 ## Google sign-in
 
 "Continue with Google" uses Supabase OAuth (`signInWithGoogle` in `src/app/login/actions.ts`, then `/auth/callback`).
