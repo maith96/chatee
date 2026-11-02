@@ -102,7 +102,7 @@ All app users must confirm they're 18+ (date of birth at sign-up; only the confi
 - **Personas:** edit `personas/*.json` (see below). How a character sheet becomes a prompt: `src/lib/prompt-builder.ts`.
 - **Plain assistant:** edit `SYSTEM_PROMPT` in `src/lib/chat-service.ts`.
 - **Models:** edit `src/lib/models.ts`. NVIDIA models use IDs from https://build.nvidia.com; Gemini uses `-latest` aliases.
-  A model only shows up if its provider's key is set. The default is Nova Fast (falls back to Gemini if there's no NVIDIA key).
+  A model only shows up if its provider's key is set. The default is Nova Smart (falls back to Gemini if there's no NVIDIA key).
 - **Rate limit:** set `RATE_LIMIT_PER_MINUTE` (default 15 messages per user per minute).
 - **Colors:** the CSS variables at the top of `src/app/globals.css`.
 

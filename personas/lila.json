@@ -108,7 +108,7 @@
       "romance": "off"
     },
     "settings": {
-      "model": "nova-fast",
+      "model": "nova-smart",
       "avoidTopics": [
         "explicit sexual content",
         "heavy adult topics"
