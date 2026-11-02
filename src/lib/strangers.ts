@@ -22,6 +22,8 @@ export type StrangerTags = {
   interests: string[];
   /** First-message ideas for when this stranger texts a user first (used in part 2). */
   openers: string[];
+  /** Which AI wrote this stranger, e.g. "nova-smart" or "Claude Sonnet 5.5" (compared on the leaderboard). */
+  generated_by?: string;
 };
 export type ImagePrompts = { base: string; variants: string[] };
 
@@ -42,24 +44,31 @@ export type Stranger = {
 };
 
 /** Defaults in case a column is empty (keeps old rows and tests safe). */
-const normalize = (s: Stranger): Stranger => ({ ...s, images: s.images ?? [], tags: { ...(s.tags ?? {}), openers: s.tags?.openers ?? [], interests: s.tags?.interests ?? [] } as StrangerTags });
+const normalize = (s: Stranger): Stranger => ({ ...s, images: s.images ?? [], tags: {
+    ...(s.tags ?? {}),
+    openers: s.tags?.openers ?? [],
+    interests: s.tags?.interests ?? [],
+    // Before imports existed, every stranger was drafted by Nova Smart.
+    generated_by: s.tags?.generated_by || "nova-smart",
+  } as StrangerTags,
+});
 
 const FIELDS = "id, slug, name, tagline, avatar_url, avatar_emoji, status, tags, images, image_prompts, definition, created_at, updated_at";
 
 // ---------- variety ---------------------------------------------------------------------------
 
-type Gender = "woman" | "man";
-type AgeBand = "21-25" | "26-30" | "31-37" | "38-45";
-type RegionGroup = "kenya" | "africa" | "world";
+export type Gender = "woman" | "man";
+export type AgeBand = "21-25" | "26-30" | "31-37" | "38-45";
+export type RegionGroup = "kenya" | "africa" | "world";
 
-const CITIES: Record<RegionGroup, [string, string][]> = {
+export const CITIES: Record<RegionGroup, [string, string][]> = {
   kenya: [["Nairobi", "Kenya"], ["Mombasa", "Kenya"], ["Kisumu", "Kenya"], ["Nakuru", "Kenya"], ["Eldoret", "Kenya"], ["Thika", "Kenya"], ["Nyeri", "Kenya"], ["Malindi", "Kenya"]],
   africa: [["Lagos", "Nigeria"], ["Accra", "Ghana"], ["Kampala", "Uganda"], ["Kigali", "Rwanda"], ["Dar es Salaam", "Tanzania"], ["Johannesburg", "South Africa"], ["Cape Town", "South Africa"], ["Addis Ababa", "Ethiopia"], ["Lusaka", "Zambia"], ["Dakar", "Senegal"]],
   world: [["London", "UK"], ["Toronto", "Canada"], ["Mumbai", "India"], ["Manila", "Philippines"], ["São Paulo", "Brazil"], ["Berlin", "Germany"], ["Seoul", "South Korea"], ["Dubai", "UAE"], ["New York", "USA"], ["Melbourne", "Australia"], ["Mexico City", "Mexico"], ["Lisbon", "Portugal"]],
 };
 // Most users are in Kenya, so the pool leans that way while staying varied.
-const REGION_SHARE: Record<RegionGroup, number> = { kenya: 0.45, africa: 0.25, world: 0.3 };
-const AGES: Record<AgeBand, [number, number]> = { "21-25": [21, 25], "26-30": [26, 30], "31-37": [31, 37], "38-45": [38, 45] };
+export const REGION_SHARE: Record<RegionGroup, number> = { kenya: 0.45, africa: 0.25, world: 0.3 };
+export const AGES: Record<AgeBand, [number, number]> = { "21-25": [21, 25], "26-30": [26, 30], "31-37": [31, 37], "38-45": [38, 45] };
 const JOBS = [
   "nurse", "software developer", "matatu business owner", "primary school teacher", "chef", "graphic designer", "mechanic",
   "university student (final year)", "accountant", "radio presenter", "photographer", "farmer (avocados)", "pharmacist",
@@ -198,8 +207,8 @@ Reply with ONLY JSON:
  "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day (e.g. 'icing a cake in their kitchen late at night')"]
 }`;
 
-const cut = (s: unknown, n: number) => String(s ?? "").trim().slice(0, n);
-const list = (xs: unknown, max: number, len: number) =>
+export const cut = (s: unknown, n: number) => String(s ?? "").trim().slice(0, n);
+export const list = (xs: unknown, max: number, len: number) =>
   (Array.isArray(xs) ? xs : []).map((x) => cut(x, len)).filter(Boolean).slice(0, max);
 const slider = (x: unknown) => Math.min(5, Math.max(1, Math.round(Number(x) || 3)));
 
@@ -210,8 +219,12 @@ function parseJson(text: string) {
 /** Builds the validated character sheet (romance always off, check-ins handled by the stranger system). */
 export function buildDefinition(seed: Seed, j: Record<string, unknown>): PersonaDefinition {
   const ex = (Array.isArray(j.examples) ? j.examples : [])
-    .map((e: { situation?: unknown; text?: unknown }) => ({ situation: cut(e?.situation, 60), text: cut(e?.text, 400) }))
-    .filter((e) => e.situation && e.text)
+    .map((e: { situation?: unknown; text?: unknown }) => ({
+      situation: cut(e?.situation, 60),
+      // A list is several bubbles in a row.
+      text: Array.isArray(e?.text) ? (list(e.text, 3, 300).length > 1 ? list(e.text, 3, 300) : cut(e.text[0], 400)) : cut(e?.text, 400),
+    }))
+    .filter((e) => e.situation && e.text.length)
     .slice(0, 8);
   const sliders = (j.sliders ?? {}) as Record<string, unknown>;
   return personaDefinitionSchema.parse({
@@ -236,7 +249,7 @@ export function buildDefinition(seed: Seed, j: Record<string, unknown>): Persona
       backstory: cut(j.backstory, 1200) || undefined,
       interests: list(j.interests, 6, 80),
       opinions: list(j.opinions, 3, 200),
-      details: list(j.details, 4, 200),
+      details: list(j.details, 5, 200),
     },
     relationship: { role: cut(j.role, 80) || "a new friend from the app", romance: "off", checkIn: { enabled: false } },
     settings: { model: "nova-smart", avoidTopics: ["explicit sexual content"] },
@@ -283,6 +296,7 @@ export async function draftStranger(seed: Seed, avoidNames: string[]): Promise<D
           vibe: seed.vibe,
           interests: definition.knowledge.interests,
           openers: list(j.openers, 3, 300),
+          generated_by: "nova-smart",
         },
         image_prompts: imagePrompts(seed, definition.identity.appearance ?? "", list(j.photo_moments, 3, 200)),
       };
@@ -324,28 +338,37 @@ export async function createDrafts(db: SupabaseClient, count: number) {
         continue;
       }
       avoid.push(r.value.name);
-      const slug = `s-${r.value.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${randomUUID().slice(0, 6)}`;
-      const { data, error } = await db
-        .from("personas")
-        .insert({
-          slug,
-          name: r.value.name,
-          tagline: r.value.tagline,
-          avatar_emoji: "🙂",
-          visibility: "private",
-          kind: "stranger",
-          status: "draft",
-          tags: r.value.tags,
-          image_prompts: r.value.image_prompts,
-          definition: r.value.definition,
-        })
-        .select(FIELDS)
-        .single();
-      if (error) failures.push(error.message);
-      else created.push(normalize(data as Stranger));
+      try {
+        created.push(await insertDraft(db, r.value));
+      } catch (err) {
+        failures.push((err as Error).message);
+      }
     }
   }
   return { created, failures };
+}
+
+/** Saves a drafted stranger (status draft, only admins can see it). */
+export async function insertDraft(db: SupabaseClient, draft: Draft) {
+  const slug = `s-${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${randomUUID().slice(0, 6)}`;
+  const { data, error } = await db
+    .from("personas")
+    .insert({
+      slug,
+      name: draft.name,
+      tagline: draft.tagline,
+      avatar_emoji: "🙂",
+      visibility: "private",
+      kind: "stranger",
+      status: "draft",
+      tags: draft.tags,
+      image_prompts: draft.image_prompts,
+      definition: draft.definition,
+    })
+    .select(FIELDS)
+    .single();
+  if (error) throw error;
+  return normalize(data as Stranger);
 }
 
 /** Moves a stranger through its lifecycle. Approving needs a main photo. */

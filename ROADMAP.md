@@ -72,6 +72,7 @@ A WhatsApp-like experience where AI "strangers" DM the user to get to know them 
 1. The app drafts about 10 strangers a day: character sheet, tags (interests, vibe, region, age band) and ready-to-copy image prompts (base, then "same person, different scene").
 2. The admin generates the images and uploads them on the draft.
 3. The admin reviews (edit, reject or approve). Approved strangers go to trial.
+4. ✅ **Drafting with a stronger model:** Nova's drafts came out generic, so the Studio also gives a ready-made template to paste into Claude, ChatGPT, Grok or another strong model, and imports the JSON it replies with. Each stranger records which model wrote it (`tags.generated_by`), and the stats page compares models.
 
 ### Lifecycle and matching
 

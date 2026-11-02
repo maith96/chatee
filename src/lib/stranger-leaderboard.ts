@@ -14,9 +14,12 @@ export type LeaderRow = {
   age_band: string;
   region: string;
   city: string;
+  /** Which AI wrote this stranger. */
+  generated_by: string;
   users: number;
   contacts: number;
   decided: number;
+  reward: number;
   score: number | null; // 0..1, smoothed
   low: number | null;
   high: number | null;
@@ -75,9 +78,11 @@ export function buildLeaderboard(raw: RawRow[], strangers: Stranger[], segment?:
         age_band: s.tags.age_band,
         region: s.tags.region,
         city: s.tags.city,
+        generated_by: s.tags.generated_by || "nova-smart",
         users,
         contacts: sum("contacts"),
         decided,
+        reward,
         score: enough ? mean : null,
         low: enough ? Math.max(0, mean - margin) : null,
         high: enough ? Math.min(1, mean + margin) : null,
@@ -117,12 +122,36 @@ export function driftWarnings(board: LeaderRow[]) {
   return warn;
 }
 
+/** How strangers written by each model do, pooled (so models can be compared). */
+export function byGenerator(board: LeaderRow[]) {
+  const groups = new Map<string, LeaderRow[]>();
+  for (const r of board) groups.set(r.generated_by, [...(groups.get(r.generated_by) ?? []), r]);
+  return [...groups.entries()]
+    .map(([generated_by, rows]) => {
+      const users = rows.reduce((s, r) => s + r.users, 0);
+      const decided = rows.reduce((s, r) => s + r.decided, 0);
+      const reward = rows.reduce((s, r) => s + r.reward, 0);
+      const enough = users >= MIN_USERS;
+      const mean = (1 + reward) / (2 + decided);
+      const margin = 1.96 * Math.sqrt((mean * (1 - mean)) / (decided + 3));
+      return {
+        generated_by,
+        strangers: rows.length,
+        users,
+        score: enough ? mean : null,
+        low: enough ? Math.max(0, mean - margin) : null,
+        high: enough ? Math.min(1, mean + margin) : null,
+      };
+    })
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.strangers - a.strangers);
+}
+
 export async function getLeaderboard(db: SupabaseClient, segment?: string) {
   const [raw, strangers] = await Promise.all([loadRaw(db), listStrangers(db).catch(() => null)]);
   if (!raw || !strangers) return null;
   const board = buildLeaderboard(raw, strangers, segment);
   const segments = [...new Set(raw.map((r) => r.segment))].filter((s) => s !== "unknown").sort();
-  return { board, segments, warnings: driftWarnings(board) };
+  return { board, segments, warnings: driftWarnings(board), generators: byGenerator(board) };
 }
 
 export { loadPerformance };

@@ -117,11 +117,12 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
           ))}
           <Table
             empty="No approved strangers yet."
-            head={["Stranger", "Status", "Who", "People", "Contacts", "Score", "Answered", "10+ messages", "Came back", "Blocked", "👍 / 👎", "Suggestion"]}
+            head={["Stranger", "Status", "Who", "Written by", "People", "Contacts", "Score", "Answered", "10+ messages", "Came back", "Blocked", "👍 / 👎", "Suggestion"]}
             rows={strangers.board.map((r) => [
               r.name,
               r.status,
               `${r.gender}, ${r.age_band}, ${r.city}`,
+              r.generated_by,
               r.users,
               r.contacts,
               r.score === null ? "–" : `${Math.round(r.score * 100)} (${Math.round((r.low ?? 0) * 100)}–${Math.round((r.high ?? 0) * 100)})`,
@@ -134,6 +135,23 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
             ])}
             dim={strangers.board.map((r) => r.score === null)}
           />
+          {strangers.generators.length > 0 && (
+            <>
+              <h3 className="mt-6 text-sm font-semibold">By the model that wrote them</h3>
+              <p className="mt-1 text-xs text-muted">All of each model&apos;s approved strangers pooled together{segment ? ", for this group" : ""}.</p>
+              <Table
+                empty=""
+                head={["Written by", "Strangers", "People", "Score"]}
+                rows={strangers.generators.map((g) => [
+                  g.generated_by,
+                  g.strangers,
+                  g.users,
+                  g.score === null ? "–" : `${Math.round(g.score * 100)} (${Math.round((g.low ?? 0) * 100)}–${Math.round((g.high ?? 0) * 100)})`,
+                ])}
+                dim={strangers.generators.map((g) => g.score === null)}
+              />
+            </>
+          )}
         </>
       )}
 
