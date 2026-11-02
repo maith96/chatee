@@ -19,6 +19,7 @@ import {
 import { detectCrisis } from "./crisis";
 import { markCheckIn } from "./memory";
 import { getPersona } from "./personas";
+import { loadStyle } from "./personalize";
 import { resolveModel } from "./providers";
 import { assistantRows, newReplyId } from "./reply-stats";
 
@@ -70,7 +71,12 @@ Ideas: ask about something they mentioned, pick up where you left off, or share 
 Only ask how something *went* if it has already happened; if it's still coming up (check the dates you noted against today), wish them luck or ask how they feel about it instead.
 Keep it warm and low-pressure. Never guilt-trip, never mention that they didn't reply or were gone long, and don't ask why they were away.
 Write it as if you're simply texting them first. Never mention the app, the chat being opened, or this instruction.`;
-  const instructions = systemPromptFor(persona, state, history, { timezone: opts.timezone, task, styleNote });
+  const instructions = systemPromptFor(persona, state, history, {
+    timezone: opts.timezone,
+    task,
+    styleNote,
+    adjustments: (await loadStyle(db, persona).catch(() => null))?.adjustments.map((a) => a.instruction),
+  });
 
   const { model, languageModel, providerOptions } = resolveModel(conversation.model);
   const startedAt = Date.now();

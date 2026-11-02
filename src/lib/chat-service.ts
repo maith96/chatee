@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { isMissingSchema } from "./db-errors";
 import { assignExperiment } from "./experiment-assign";
 import { activeVariant, applyVariant } from "./experiments";
+import { loadStyle } from "./personalize";
 import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 export const SYSTEM_PROMPT =
@@ -225,7 +226,7 @@ export function systemPromptFor(
   persona: Persona | null,
   state: PersonaState | null,
   history: Message[],
-  opts: { latest?: string; timezone?: string; task?: string; styleNote?: string } = {},
+  opts: { latest?: string; timezone?: string; task?: string; styleNote?: string; adjustments?: string[] } = {},
 ) {
   if (!persona) return SYSTEM_PROMPT;
   const lastUser = [...history].reverse().find((m) => m.role === "user");
@@ -242,6 +243,7 @@ export function systemPromptFor(
     minor: opts.latest ? detectMinor(opts.latest) : false,
     task: opts.task,
     styleNote: opts.styleNote,
+    adjustments: opts.adjustments,
   });
 }
 
@@ -275,9 +277,11 @@ export async function startReply(
   ]);
   // A chat in a style experiment sees the persona with its variant's style.
   const { persona, styleNote, label: variantLabel } = personaForChat(basePersona, opts.conversation);
+  // Per-user style (runs alongside saving the message). Never blocks a reply if it fails.
+  const stylePromise = persona ? loadStyle(db, persona).catch((err) => (console.error("Style load failed", err), null)) : Promise.resolve(null);
   // Computed before the new message is saved, so "time since last message" is the real gap.
   const latest = Array.isArray(opts.content) ? opts.content.join("\n") : opts.content;
-  const instructions = systemPromptFor(persona, state, history, { latest, timezone: opts.timezone, styleNote });
+  const historyForPrompt = [...history];
 
   // Several texts sent in quick succession arrive together and are saved as separate bubbles.
   const contents = Array.isArray(opts.content) ? opts.content : [opts.content];
@@ -312,6 +316,14 @@ export async function startReply(
   if (model.id !== opts.conversation.model) {
     await updateConversation(db, opts.conversation.id, { model: model.id });
   }
+
+  const style = await stylePromise;
+  const instructions = systemPromptFor(persona, state, historyForPrompt, {
+    latest,
+    timezone: opts.timezone,
+    styleNote,
+    adjustments: style?.adjustments.map((a) => a.instruction),
+  });
 
   let streamError: unknown; // the real provider error (result.text only reports "no output")
   const replyId = newReplyId();

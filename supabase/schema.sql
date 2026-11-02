@@ -507,5 +507,13 @@ $$;
 revoke all on function public.experiment_stats(text) from public, anon;
 grant execute on function public.experiment_stats(text) to authenticated;
 
+-- =====================================================================
+-- v6: per-user style. Safe to re-run.
+-- Personas tune their texting style to each user (src/lib/personalize.ts). Users can switch it off,
+-- or reset it per persona (only signals after style_reset_at count).
+-- =====================================================================
+alter table public.profiles add column if not exists personalize boolean not null default true;
+alter table public.relationships add column if not exists style_reset_at timestamptz;
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

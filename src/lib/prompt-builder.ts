@@ -31,6 +31,8 @@ export type PromptContext = {
   minor?: boolean;
   /** One extra style instruction from a style experiment variant. */
   styleNote?: string;
+  /** Style tuning learned from this user's feedback and texting (see personalize.ts). */
+  adjustments?: string[];
 };
 
 const MINOR_NOTE = `IMPORTANT, for this reply only: the user just said they're under 18. Persona is only for adults. Kindly and briefly tell them, in your own voice, that this app is meant for people 18 and over, so you can't keep chatting like this. Be warm, not scolding. No flirting or romance.`;
@@ -193,6 +195,10 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     c.humour ? `Your humour: ${c.humour}.` : "",
     c.quirks.length ? `Quirks:\n${list(c.quirks)}` : "",
     ctx.styleNote ? `Style for this chat: ${ctx.styleNote}` : "",
+    // Not during a crisis: safety comes first, whatever their style preferences.
+    ctx.adjustments?.length && !ctx.crisis
+      ? `This person's preferences (they only tune your style; keep your personality, values and boundaries):\n${list(ctx.adjustments)}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");

@@ -98,6 +98,12 @@ per session; check-ins are shown separately.
   `insert into public.admins (user_id) select id from auth.users where email = 'you@example.com';`
 - Bump `PROMPT_VERSION` in `src/lib/prompt-builder.ts` when you change the prompt layers.
 
+**Per-user style:** each persona tunes how it texts to each user (`src/lib/personalize.ts`): shorter or more
+detailed replies, more variety or a calmer tone from repeated 👎 reasons (2+), and briefer/fuller replies or fewer emoji
+from how the user texts (10+ messages). Adjustments come from a fixed list and only touch style, never personality,
+romance or safety, and they're skipped during a crisis. Users see them in the 🧠 Memory panel, can reset them per persona,
+or switch "Adapt to my style" off for all personas.
+
 **Style experiments (A/B tests)** live in `src/lib/experiments.ts`. Each new persona chat joins one variant of the first
 active experiment for its persona (stable per chat; existing chats aren't moved). Variants may only change reply style
 (length, bubbles, emoji, lowercase, a short style note) or the model, never romance, check-ins or safety rules.

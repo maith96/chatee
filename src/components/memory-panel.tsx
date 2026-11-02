@@ -10,11 +10,34 @@ type Data = {
   about_them: Memory[];
   relationship: { stage: string; label: string; messages: number; since: string | null };
 };
+type Style = { personalize: boolean; adjustments: { id: string; label: string; because: string }[] };
 
 /** Shows what a persona remembers about the user, with controls to forget things. */
 export function MemoryPanel({ persona, onClose }: { persona: PersonaSummary; onClose: () => void }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [style, setStyle] = useState<Style | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/v1/personas/${persona.id}/style`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setStyle)
+      .catch(() => {});
+  }, [persona.id]);
+
+  async function resetStyle() {
+    await fetch(`/api/v1/personas/${persona.id}/style`, { method: "DELETE" });
+    setStyle((s) => s && { ...s, adjustments: [] });
+  }
+
+  async function togglePersonalize(on: boolean) {
+    setStyle((s) => s && { ...s, personalize: on, adjustments: on ? s.adjustments : [] });
+    await fetch("/api/v1/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ personalize: on }) });
+    if (on) {
+      const res = await fetch(`/api/v1/personas/${persona.id}/style`);
+      if (res.ok) setStyle(await res.json());
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/v1/personas/${persona.id}/memories`)
@@ -78,6 +101,37 @@ export function MemoryPanel({ persona, onClose }: { persona: PersonaSummary; onC
                   {data.about_them.map((m) => <li key={m.id}>• {m.content}</li>)}
                 </ul>
               </details>
+            )}
+            {style && (
+              <section className="mb-4" aria-label="Your style">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">How {persona.name} adapts to you</h3>
+                {!style.personalize ? (
+                  <p className="text-sm text-muted">Off. {persona.name} texts in their usual style.</p>
+                ) : style.adjustments.length === 0 ? (
+                  <p className="text-sm text-muted">
+                    Nothing yet. {persona.name} adjusts their style (like reply length or emoji) from your 👍/👎 and how you text.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {style.adjustments.map((a) => (
+                      <li key={a.id} className="rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                        <div className="font-medium">{a.label}</div>
+                        <div className="text-xs text-muted">{a.because}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={style.personalize} onChange={(e) => togglePersonalize(e.target.checked)} className="accent-[var(--accent)]" />
+                    Adapt to my style
+                  </label>
+                  {style.personalize && style.adjustments.length > 0 && (
+                    <button onClick={resetStyle} className="text-accent hover:underline">Reset</button>
+                  )}
+                </div>
+                {!style.personalize && <p className="mt-1 text-xs text-muted">Applies to all personas.</p>}
+              </section>
             )}
             <p className="mt-auto text-xs text-muted">Only you can see this. Memories are private to you and {persona.name}.</p>
             {(data.about_you.length > 0 || data.about_them.length > 0) && (

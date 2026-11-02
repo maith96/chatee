@@ -182,6 +182,16 @@ What this persona remembers about the user, and how close they are.
 Memories are learned automatically after each reply and are private to the user. Stages (`new` → `warm` → `close`)
 need both enough messages and enough days, so they can't be rushed.
 
+### `GET /personas/{id}/style`
+How this persona has adapted its texting style to you:
+`{ "personalize": true, "adjustments": [ { "id": "shorter", "label": "Shorter replies", "because": "You marked replies as too long 2 times." } ] }`
+
+### `DELETE /personas/{id}/style`
+Resets the adjustments for this persona (it starts learning again from now) → `204`.
+
+### `PATCH /me`
+`{ "personalize": false }` switches style adaptation off for all personas (default on). `GET /me` returns the setting.
+
 ### `DELETE /memories/{id}`
 Forget one memory. → `204`
 
