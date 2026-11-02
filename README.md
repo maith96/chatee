@@ -136,6 +136,14 @@ model, and writes a review page to `evals/reports/latest.html`. Run it after cha
 private personas are visible only to their owner; unlisted ones are viewable by link.
 All app users must confirm they're 18+ (date of birth at sign-up; only the confirmation is stored).
 
+## Rate limits and fallback
+
+NVIDIA allows **40 requests per minute** per account. To stay under it:
+- If a model is rate limited or overloaded, the reply automatically uses the matching model on the other provider
+  (Nova Smart ↔ Terra Fast, Nova Fast ↔ Terra Lite, Nova Deep ↔ Terra Pro). The saved message records the model that answered.
+- Background jobs (memory extraction, the news digest) use Gemini Flash-Lite, so NVIDIA's quota goes to live replies.
+- `npm run eval` paces itself to 20 requests/minute (`EVAL_RPM`) and never falls back, so it always tests the real model.
+
 ## Customizing
 
 - **Personas:** edit `personas/*.json` (see below). How a character sheet becomes a prompt: `src/lib/prompt-builder.ts`.

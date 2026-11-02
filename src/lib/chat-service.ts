@@ -271,7 +271,7 @@ export async function startReply(
   db: SupabaseClient,
   opts: { conversation: Conversation; content: string | string[]; model?: ModelId; timezone?: string; abortSignal?: AbortSignal },
 ) {
-  const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
+  const { model, languageModel, providerOptions, servedBy } = resolveModel(opts.model ?? opts.conversation.model);
   const personaId = opts.conversation.persona_id;
   const [history, basePersona, state] = await Promise.all([
     listMessages(db, opts.conversation.id),
@@ -367,7 +367,7 @@ export async function startReply(
                 db,
                 assistantRows(opts.conversation.id, parts, {
                   replyId,
-                  model: model.id,
+                  model: servedBy().id, // the backup model if NVIDIA/Gemini was out of capacity
                   persona,
                   variant: variantLabel,
                   latencyMs: firstTokenAt !== undefined ? firstTokenAt - startedAt : undefined,

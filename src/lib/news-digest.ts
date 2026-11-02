@@ -7,7 +7,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { isGrounded } from "./memory";
 import { FEEDS, isRegion, isTopic, PARENT_REGION, type Region, type Topic } from "./news-sources";
-import { resolveModel } from "./providers";
+import { backgroundModelId, resolveModel } from "./providers";
 
 const MAX_AGE_HOURS = 36;
 const PER_FEED = 8;
@@ -166,7 +166,7 @@ function toDigest(i: RawItem, extra?: Partial<DigestItem>): DigestItem {
 async function condenseBatch(items: RawItem[], want: number): Promise<DigestItem[]> {
   try {
     const list = items.map((i, n) => `[${n}] (${i.source}, ${i.region}/${i.topic}) ${i.title} — ${i.description}`).join("\n");
-    const { languageModel, providerOptions } = resolveModel(process.env.NEWS_DIGEST_MODEL === "nova-smart" ? "nova-smart" : "nova-fast");
+    const { languageModel, providerOptions } = resolveModel(process.env.NEWS_DIGEST_MODEL || backgroundModelId());
     const { text } = await generateText({ model: languageModel, providerOptions, maxOutputTokens: 4000, prompt: DIGEST_PROMPT(list, want) });
     const parsed = parseTagged(text);
     const out: DigestItem[] = [];

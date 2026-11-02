@@ -82,7 +82,7 @@ Write it as if you're simply texting them first. Never mention the app, the chat
     news,
   });
 
-  const { model, languageModel, providerOptions } = resolveModel(conversation.model);
+  const { languageModel, providerOptions, servedBy } = resolveModel(conversation.model);
   const startedAt = Date.now();
   const { text } = await generateText({
     model: languageModel,
@@ -102,7 +102,7 @@ Write it as if you're simply texting them first. Never mention the app, the chat
   const saved = await insertMessages(
     db,
     // Not streamed, so latency here is the full generation time.
-    assistantRows(conversation.id, bubbles, { replyId, model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt, variant: label }),
+    assistantRows(conversation.id, bubbles, { replyId, model: servedBy().id, persona, kind: "checkin", latencyMs: Date.now() - startedAt, variant: label }),
   );
   await markCheckIn(db, persona.id).catch(() => {});
   if (news) await recordMentions(db, { conversationId: conversation.id, replyId, items: mentionedItems(text, news.items) }).catch(() => {});

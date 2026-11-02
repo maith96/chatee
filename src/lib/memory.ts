@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import type { Persona } from "./personas";
 import type { Stage } from "./prompt-builder";
-import { resolveModel } from "./providers";
+import { backgroundModelId, resolveModel } from "./providers";
 
 export type Memory = { id: string; persona_id: string; kind: "user" | "self"; content: string; created_at: string };
 export type Relationship = {
@@ -154,7 +154,7 @@ export async function extractMemories(
   existing: { user: Memory[]; self: Memory[] },
 ) {
   if (!replyText.trim()) return;
-  const { languageModel, providerOptions } = resolveModel("nova-fast");
+  const { languageModel, providerOptions } = resolveModel(backgroundModelId()); // keeps NVIDIA's limit for live replies
   const { text } = await generateText({
     model: languageModel,
     providerOptions,
