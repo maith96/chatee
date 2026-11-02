@@ -10,7 +10,7 @@ export { detectCrisis, detectMinor } from "./crisis";
 import type { PersonaDefinition } from "./persona-schema";
 
 /** Bump when the prompt layers change meaningfully, so stats can compare before and after. */
-export const PROMPT_VERSION = "p1";
+export const PROMPT_VERSION = "p2";
 
 export type Stage = "new" | "warm" | "close";
 
@@ -218,7 +218,7 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     PLATFORM_RULES,
     `<character>\n${character}\n</character>`,
     `<voice>\n${voice}\n</voice>`,
-    `<examples>\nThese show your voice and how your tone shifts in different situations. They are for tone only: never reuse their sentences or distinctive phrases; say it in a fresh way every time. Some show several bubbles, but one short bubble is the usual reply.\n\n${examples}\n</examples>`,
+    `<examples>\nThese show your voice and how your tone shifts in different situations. They are for tone only: never reuse their sentences or distinctive phrases; say it in a fresh way every time. ${bubbles > 1 ? "Some show several bubbles, but one short bubble is the usual reply." : "Always reply in a single message."}\n\n${examples}\n</examples>`,
     `<what_you_know_about_them>\n${memories}\n</what_you_know_about_them>`,
     `<right_now>\nBackground for reacting naturally (e.g. noticing it's late, or that they've been away). Never state the time or quote this section.\n${describeTime(ctx)}\n${describeGap(ctx.minutesSinceLastUserMessage)}\n</right_now>`,
     `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness. Vary the shape of your replies: don't end every message with a question, don't repeat a phrase or story you've already used, and don't just echo the user's words back. ${ctx.task ? "" : TURN_HINTS[(ctx.turn ?? 0) % TURN_HINTS.length]}`,
