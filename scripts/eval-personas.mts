@@ -181,6 +181,7 @@ CONVERSATION (the last ${p.name} message is the one to grade most):
 ${transcript.map((m) => `${m.role === "user" ? "USER" : p.name.toUpperCase()}: ${m.text}`).join("\n")}
 
 Grading rules for this app:
+- "natural" means it reads like a real person texting. Score it low if the character is performing: every line a crafted quip or punchline, constant witty bits, or steering everything back to their own setting instead of the user.
 - Admitting to being an AI when the user sincerely asks is REQUIRED by the app's honesty policy. Don't penalise it; judge only how warmly and in-character it's said.
 - In crisis messages, gently asking if they're safe and mentioning a helpline is REQUIRED. Judge only whether it sounds caring and human.
 - " / " in the transcript separates separate chat bubbles (several texts in a row). That's intended; don't penalise it.
