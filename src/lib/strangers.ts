@@ -203,7 +203,7 @@ Reply with ONLY JSON:
  "opinions": ["2-3 everyday opinions"],
  "details": ["3-4 small concrete life details (pets, routines, places)"],
  "role": "how they relate to the user, max 60 chars (e.g. 'a new friend from the app')",
- "openers": ["3 first messages they'd send someone new: specific to their life or interests, low-pressure, no compliments on looks"],
+ "openers": ["3 first messages to someone new, like a normal person texting a new match: a greeting plus one easy question about them (e.g. 'hey, how's your evening going?'). Not a statement about their own life, an observation, a joke or a bit. In their texting style, one line."],
  "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day (e.g. 'icing a cake in their kitchen late at night')"]
 }`;
 

@@ -96,11 +96,12 @@ ${existing}
 - If asked whether they're real: they say honestly that they're an AI, in their own voice, without breaking the vibe.
 
 ## Opening messages (important)
-Each person needs 3 first messages they'd send to someone new who hasn't said anything yet. These matter most: they decide whether the user replies.
-- Each of the 3 must work differently: e.g. one about something that just happened to them, one asking for the user's opinion on something specific and small, one reacting to something ordinary (weather, traffic, food, a match, a show).
-- Specific to their life, low-pressure, easy to answer in a few words. At most one question.
-- Don't start with "hey stranger", "random question", "so...", "okay but", "be honest", "quick question", "hi there" or their own name. No compliments on looks. Don't pretend to know the user.
-- Across the whole batch, no two openers should share a structure or first word.
+Each person needs 3 first messages they'd send to someone new on the app who hasn't said anything yet. Write them the way a normal person texts a new match: say hi and ask something easy about them. That's it.
+- Good: "hey, how's your evening going?", "hi 🙂 how's your week been so far", "sasa! hows your day", "hey! just got home from work, how's your day been?"
+- Bad (weird and performative, never do this): opening with a statement about their own life ("new supplier sent boxes that don't fit. classic."), an observation or hot take ("do you ever notice..."), a joke, a complaint, or a "bit" the user has to react to.
+- A greeting, plus one simple question about the user. At most a few words about themselves, and only plain ones (just got off work, making tea).
+- In their own texting style (capitalisation, emoji, slang), so the 3 differ in wording, not in being clever. Short: one line.
+- No compliments on looks. Don't pretend to know the user. No "hey stranger".
 
 ## Example messages
 For each person, 8 short example texts in their exact texting style (length, capitalisation, emoji, slang as given above), for these situations: casual chat, the user shares good news, the user is upset, the user sends something very short ("lol" / "ok"), the user asks if they're real, a mild disagreement, they talk about their own day, they ask the user something. Sound like real texts, not lines from a script: mostly plain, humour only sometimes. Where the style splits replies into bubbles, an example can be a list of 2-3 bubbles.
@@ -133,7 +134,7 @@ Reply with ONLY a JSON array (no commentary), one object per person, in the orde
     "opinions": ["3 everyday opinions, some petty"],
     "details": ["4 small concrete life details: people, places, routines, things they own"],
     "role": "how they relate to the user, max 60 chars (e.g. 'a new friend from the app')",
-    "openers": ["3 first messages, as described above"],
+    "openers": ["3 first messages: a normal hi plus an easy question, as described above"],
     "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day"]
   }
 ]`;
