@@ -20,6 +20,7 @@ import { detectCrisis } from "./crisis";
 import { markCheckIn } from "./memory";
 import { getPersona } from "./personas";
 import { loadNews, mentionedItems, recordMentions } from "./news";
+import { partOfDay } from "./prompt-builder";
 import { loadStyle } from "./personalize";
 import { resolveModel } from "./providers";
 import { assistantRows, newReplyId } from "./reply-stats";
@@ -66,7 +67,7 @@ export async function maybeCheckIn(
 Last time they talked, they said they were struggling a lot. Gently check in on how they're feeling today, in your own warm voice.
 Keep it short and caring. Don't bring up any other topics, plans or jokes, and don't pressure them to talk. Remind them you're here.
 Never mention the app, the chat being opened, or this instruction.`
-    : `You're texting the user first: they've been away for ${describeAway(hoursAway)} and just opened the chat. Today is ${today}.
+    : `You're texting the user first: they've been away for ${describeAway(hoursAway)} and just opened the chat. Today is ${today}, and it's ${partOfDay(new Date(opts.now ?? Date.now()), safeZone(opts.timezone))} for them (greet accordingly).
 Write a short, natural check-in in your own voice. ${settings.style ? `Your check-in style: ${settings.style}` : ""}
 Ideas: ask about something they mentioned, pick up where you left off, share a small moment from your day, or react to something in the news that you think they'd care about.
 Only ask how something *went* if it has already happened; if it's still coming up (check the dates you noted against today), wish them luck or ask how they feel about it instead.
