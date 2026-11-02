@@ -6,7 +6,6 @@ import { generateText } from "ai";
 import { splitBubbles } from "./bubbles";
 import { createConversation, insertMessages, systemPromptFor, type Conversation, type Message } from "./chat-service";
 import { isMissingSchema } from "./db-errors";
-import { loadNews } from "./news";
 import { chooseStranger, loadPerformance, userSegment, type Candidate, type RecentContact } from "./stranger-matching";
 import { getPersona, summarize, type Persona } from "./personas";
 import { partOfDay } from "./prompt-builder";
@@ -107,20 +106,18 @@ export async function pickStranger(
   return choice ? { id: choice.id, segment, region, mode: choice.mode } : null;
 }
 
-export const OPENER_TASK = (persona: Persona, ideas: string[], part: string) => `You're texting this person for the very first time. You're strangers who just matched on the app, and they haven't said anything yet.
-Send a short first message in your own texting style to start a conversation and get to know them. It's ${part} for them.
-Inspiration (don't copy these, write something fresh in your own words that fits the time of day): ${ideas.join(" | ") || "something from your day"}. Or react to a story from <world_today> if it fits you.
-Be specific and low-pressure, at most one question. No compliments on their looks, don't pretend you know them, and don't introduce yourself formally (${persona.name} is shown above your message).`;
+// Their saved openers aren't fed in: older drafts' openers were performative "bits", and the model copied
+// their shape. Normal openers come from these rules plus the persona's own texting style.
+export const OPENER_TASK = (persona: Persona, part: string) => `You're texting this person for the very first time. You just matched on the app and they haven't said anything yet. It's ${part} for them.
+Open the way a normal person texts a new match: a greeting and one easy question about them. One short line.
+Make it sound like you: your usual greeting, your capitalisation, your emoji and slang habits (local words if you use them). Often people add a few plain words about what they're doing right now (just got home, on a break, making supper) before the question; do that if it's natural for you.
+Don't open with a story, an observation, a complaint, a joke, a hot take or the news: nothing the person has to react to or work out.
+The kind of thing that works, never to be copied word for word: hi + how's your day been / hey + what are you up to / a local greeting + how's the week treating you.
+No compliments on their looks, don't pretend you know them, and don't introduce yourself formally (${persona.name} is shown above your message).`;
 
 /** Writes the stranger's first message into a new conversation. */
 async function writeOpener(db: SupabaseClient, persona: Persona, conversation: Conversation, timezone?: string) {
-  const tags = (persona.tags ?? {}) as { openers?: string[] };
-  const news = await loadNews(db, { persona, conversationId: conversation.id, timezone }).catch(() => null);
-  const instructions = systemPromptFor(persona, null, [], {
-    timezone,
-    task: OPENER_TASK(persona, tags.openers ?? [], partOfDay(new Date(), timezone)),
-    news,
-  });
+  const instructions = systemPromptFor(persona, null, [], { timezone, task: OPENER_TASK(persona, partOfDay(new Date(), timezone)) });
   const { languageModel, providerOptions, servedBy } = resolveModel(conversation.model);
   const { text } = await generateText({
     model: languageModel,
