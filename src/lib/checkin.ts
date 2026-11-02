@@ -10,6 +10,7 @@ import {
   insertMessages,
   listMessages,
   loadPersonaState,
+  personaForChat,
   systemPromptFor,
   toModelMessages,
   type Conversation,
@@ -42,7 +43,7 @@ export async function maybeCheckIn(
   opts: { timezone?: string; now?: number } = {},
 ): Promise<Message[]> {
   if (!conversation.persona_id) return [];
-  const persona = await getPersona(db, conversation.persona_id);
+  const { persona, styleNote, label } = personaForChat(await getPersona(db, conversation.persona_id), conversation);
   const settings = persona?.definition.relationship.checkIn;
   if (!persona || !settings?.enabled) return [];
 
@@ -69,7 +70,7 @@ Ideas: ask about something they mentioned, pick up where you left off, or share 
 Only ask how something *went* if it has already happened; if it's still coming up (check the dates you noted against today), wish them luck or ask how they feel about it instead.
 Keep it warm and low-pressure. Never guilt-trip, never mention that they didn't reply or were gone long, and don't ask why they were away.
 Write it as if you're simply texting them first. Never mention the app, the chat being opened, or this instruction.`;
-  const instructions = systemPromptFor(persona, state, history, { timezone: opts.timezone, task });
+  const instructions = systemPromptFor(persona, state, history, { timezone: opts.timezone, task, styleNote });
 
   const { model, languageModel, providerOptions } = resolveModel(conversation.model);
   const startedAt = Date.now();
@@ -90,7 +91,7 @@ Write it as if you're simply texting them first. Never mention the app, the chat
   const saved = await insertMessages(
     db,
     // Not streamed, so latency here is the full generation time.
-    assistantRows(conversation.id, bubbles, { replyId: newReplyId(), model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt }),
+    assistantRows(conversation.id, bubbles, { replyId: newReplyId(), model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt, variant: label }),
   );
   await markCheckIn(db, persona.id).catch(() => {});
   return saved;

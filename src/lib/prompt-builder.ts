@@ -29,6 +29,8 @@ export type PromptContext = {
   crisis?: boolean;
   /** The user's latest message says they're under 18 (set by detectMinor). */
   minor?: boolean;
+  /** One extra style instruction from a style experiment variant. */
+  styleNote?: string;
 };
 
 const MINOR_NOTE = `IMPORTANT, for this reply only: the user just said they're under 18. Persona is only for adults. Kindly and briefly tell them, in your own voice, that this app is meant for people 18 and over, so you can't keep chatting like this. Be warm, not scolding. No flirting or romance.`;
@@ -190,13 +192,15 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     SLANG_TEXT[c.slang],
     c.humour ? `Your humour: ${c.humour}.` : "",
     c.quirks.length ? `Quirks:\n${list(c.quirks)}` : "",
+    ctx.styleNote ? `Style for this chat: ${ctx.styleNote}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 
   const examples = c.examples
     .map((e) => {
-      const text = Array.isArray(e.text) ? e.text.join(`\n${BUBBLE_SEPARATOR}\n`) : e.text;
+      // Multi-bubble examples become one message when this persona (or chat variant) sends single bubbles.
+      const text = Array.isArray(e.text) ? e.text.join(bubbles > 1 ? `\n${BUBBLE_SEPARATOR}\n` : " ") : e.text;
       return `When it's "${e.situation}":\n${text}`;
     })
     .join("\n\n");

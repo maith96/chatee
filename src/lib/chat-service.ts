@@ -8,7 +8,10 @@ import { getPersona, type Persona } from "./personas";
 import { bumpRelationship, extractMemories, getRelationship, listMemories, stageFor, type Memory, type Relationship } from "./memory";
 import { buildPersonaPrompt, detectCrisis, detectMinor } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
+import { randomUUID } from "node:crypto";
 import { isMissingSchema } from "./db-errors";
+import { assignExperiment } from "./experiment-assign";
+import { activeVariant, applyVariant } from "./experiments";
 import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 export const SYSTEM_PROMPT =
@@ -23,6 +26,9 @@ export type Conversation = {
   title: string;
   model: ModelId;
   persona_id: string | null;
+  /** Style experiment this chat is part of (see experiments.ts), or null. */
+  experiment?: string | null;
+  variant?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -39,7 +45,8 @@ export type Message = {
   created_at: string;
 };
 
-const CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at";
+const CONVERSATION_FIELDS = "id, title, model, persona_id, experiment, variant, created_at, updated_at";
+const LEGACY_CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at"; // before schema v5
 const MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, reply_id, created_at";
 // Until schema v4 is run in Supabase: work without the stats columns instead of failing.
 const LEGACY_MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, created_at";
@@ -47,55 +54,89 @@ const STATS_COLUMNS = ["reply_id", "prompt_version", "variant", "words", "emoji"
 
 let warnedLegacy = false;
 function warnLegacy() {
-  if (!warnedLegacy) console.warn("Stats columns missing: run supabase/schema.sql (v4) in Supabase to enable stats.");
+  if (!warnedLegacy) console.warn("Database is on an older schema: re-run supabase/schema.sql in Supabase to enable stats and experiments.");
   warnedLegacy = true;
 }
 export const DEFAULT_TITLE = "New conversation";
 
 // ---- Conversations -------------------------------------------------------
 
+type Result = { data: unknown; error: unknown };
+/** Runs a query with the current columns; if the database is on an older schema, retries with the old ones. */
+async function withFallback(run: (fields: string, legacy: boolean) => PromiseLike<Result>, fields: string, legacyFields: string) {
+  let res = await run(fields, false);
+  if (res.error && isMissingSchema(res.error)) {
+    warnLegacy();
+    res = await run(legacyFields, true);
+  }
+  if (res.error) throw res.error;
+  return res.data;
+}
+
 export async function listConversations(db: SupabaseClient, limit = 50) {
-  const { data, error } = await db
-    .from("conversations")
-    .select(CONVERSATION_FIELDS)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
+  const data = await withFallback(
+    (f) => db.from("conversations").select(f).order("updated_at", { ascending: false }).limit(limit),
+    CONVERSATION_FIELDS,
+    LEGACY_CONVERSATION_FIELDS,
+  );
   return data as Conversation[];
 }
 
 export async function getConversation(db: SupabaseClient, id: string) {
-  const { data, error } = await db.from("conversations").select(CONVERSATION_FIELDS).eq("id", id).maybeSingle();
-  if (error) throw error;
+  const data = await withFallback(
+    (f) => db.from("conversations").select(f).eq("id", id).maybeSingle(),
+    CONVERSATION_FIELDS,
+    LEGACY_CONVERSATION_FIELDS,
+  );
   return data as Conversation | null;
 }
 
 export async function createConversation(
   db: SupabaseClient,
-  input: { title?: string; model?: ModelId; personaId?: string | null },
+  input: { title?: string; model?: ModelId; persona?: Persona | null; modelChosen?: boolean },
 ) {
-  const { data, error } = await db
-    .from("conversations")
-    .insert({
-      title: input.title?.trim() || DEFAULT_TITLE,
-      model: resolveModel(input.model ?? defaultModelId()).model.id,
-      persona_id: input.personaId ?? null,
-    })
-    .select(CONVERSATION_FIELDS)
-    .single();
-  if (error) throw error;
+  // New persona chats join a style experiment (if one applies). The id is made here so assignment is stable.
+  const id = randomUUID();
+  const assigned = input.persona ? assignExperiment(input.persona, id) : null;
+  const model = !input.modelChosen && assigned?.variant.model ? assigned.variant.model : input.model;
+  const row = {
+    id,
+    title: input.title?.trim() || DEFAULT_TITLE,
+    model: resolveModel(model ?? defaultModelId()).model.id,
+    persona_id: input.persona?.id ?? null,
+    ...(assigned ? { experiment: assigned.experiment.id, variant: assigned.variant.id } : {}),
+  };
+  const data = await withFallback(
+    (f, legacy) => {
+      const { experiment: _e, variant: _v, ...old } = row as typeof row & { experiment?: string; variant?: string }; // eslint-disable-line @typescript-eslint/no-unused-vars
+      return db.from("conversations").insert(legacy ? old : row).select(f).single();
+    },
+    CONVERSATION_FIELDS,
+    LEGACY_CONVERSATION_FIELDS,
+  );
   return data as Conversation;
 }
 
 export async function updateConversation(db: SupabaseClient, id: string, patch: { title?: string; model?: ModelId }) {
-  const { data, error } = await db
-    .from("conversations")
-    .update(patch)
-    .eq("id", id)
-    .select(CONVERSATION_FIELDS)
-    .maybeSingle();
-  if (error) throw error;
+  const data = await withFallback(
+    (f) => db.from("conversations").update(patch).eq("id", id).select(f).maybeSingle(),
+    CONVERSATION_FIELDS,
+    LEGACY_CONVERSATION_FIELDS,
+  );
   return data as Conversation | null;
+}
+
+/** The persona as this chat sees it: with its experiment variant's style applied (if any). */
+export function personaForChat(persona: Persona | null, conversation: Pick<Conversation, "experiment" | "variant">) {
+  if (!persona) return { persona, variant: null, styleNote: undefined, label: null };
+  const variant = activeVariant(conversation.experiment, conversation.variant);
+  if (!variant) return { persona, variant: null, styleNote: undefined, label: null };
+  return {
+    persona: { ...persona, definition: applyVariant(persona.definition, variant) },
+    variant,
+    styleNote: variant.style?.note,
+    label: `${conversation.experiment}:${variant.id}`,
+  };
 }
 
 export async function deleteConversation(db: SupabaseClient, id: string) {
@@ -135,6 +176,7 @@ type NewMessage = {
   bubble_count?: number;
   latency_ms?: number;
   crisis?: boolean;
+  variant?: string;
 };
 
 /** Saves several bubbles at once, 1ms apart so they keep their order. */
@@ -183,7 +225,7 @@ export function systemPromptFor(
   persona: Persona | null,
   state: PersonaState | null,
   history: Message[],
-  opts: { latest?: string; timezone?: string; task?: string } = {},
+  opts: { latest?: string; timezone?: string; task?: string; styleNote?: string } = {},
 ) {
   if (!persona) return SYSTEM_PROMPT;
   const lastUser = [...history].reverse().find((m) => m.role === "user");
@@ -199,6 +241,7 @@ export function systemPromptFor(
     crisis: opts.latest ? detectCrisis(opts.latest) : false,
     minor: opts.latest ? detectMinor(opts.latest) : false,
     task: opts.task,
+    styleNote: opts.styleNote,
   });
 }
 
@@ -225,14 +268,16 @@ export async function startReply(
 ) {
   const { model, languageModel, providerOptions } = resolveModel(opts.model ?? opts.conversation.model);
   const personaId = opts.conversation.persona_id;
-  const [history, persona, state] = await Promise.all([
+  const [history, basePersona, state] = await Promise.all([
     listMessages(db, opts.conversation.id),
     personaId ? getPersona(db, personaId) : Promise.resolve(null),
     personaId ? loadPersonaState(db, personaId) : Promise.resolve(null),
   ]);
+  // A chat in a style experiment sees the persona with its variant's style.
+  const { persona, styleNote, label: variantLabel } = personaForChat(basePersona, opts.conversation);
   // Computed before the new message is saved, so "time since last message" is the real gap.
   const latest = Array.isArray(opts.content) ? opts.content.join("\n") : opts.content;
-  const instructions = systemPromptFor(persona, state, history, { latest, timezone: opts.timezone });
+  const instructions = systemPromptFor(persona, state, history, { latest, timezone: opts.timezone, styleNote });
 
   // Several texts sent in quick succession arrive together and are saved as separate bubbles.
   const contents = Array.isArray(opts.content) ? opts.content : [opts.content];
@@ -301,6 +346,7 @@ export async function startReply(
                   replyId,
                   model: model.id,
                   persona,
+                  variant: variantLabel,
                   latencyMs: firstTokenAt !== undefined ? firstTokenAt - startedAt : undefined,
                 }),
               )

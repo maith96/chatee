@@ -98,6 +98,13 @@ per session; check-ins are shown separately.
   `insert into public.admins (user_id) select id from auth.users where email = 'you@example.com';`
 - Bump `PROMPT_VERSION` in `src/lib/prompt-builder.ts` when you change the prompt layers.
 
+**Style experiments (A/B tests)** live in `src/lib/experiments.ts`. Each new persona chat joins one variant of the first
+active experiment for its persona (stable per chat; existing chats aren't moved). Variants may only change reply style
+(length, bubbles, emoji, lowercase, a short style note) or the model, never romance, check-ins or safety rules.
+The stats page compares each variant with the control (95% ranges, and "better/worse" only at p < 0.05 with 20+ samples).
+To add one: write it in `experiments.ts`, check it with `npm run eval -- --variant <experiment>:<variant>`, deploy.
+To stop one, set `active: false`: its chats go back to normal and its results stay on the stats page.
+
 ### Testing persona quality
 
 ```bash

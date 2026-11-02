@@ -18,21 +18,21 @@ export const POST = route(async (req) => {
   const body = await readJson(req);
   if (body.title !== undefined && typeof body.title !== "string") throw errors.badRequest("'title' must be a string.");
   if (body.model !== undefined && (!isModelId(body.model) || !isModelAvailable(body.model))) throw errors.badRequest("Unknown or unavailable 'model'. See GET /api/v1/models.");
-  let personaId: string | null = null;
+  let persona = null;
   let model = body.model as ModelId | undefined;
   if (body.persona_id !== undefined && body.persona_id !== null) {
     if (typeof body.persona_id !== "string") throw errors.badRequest("'persona_id' must be a string.");
     assertUuid(body.persona_id, "Persona");
-    const persona = await getPersona(db, body.persona_id); // RLS: only personas you can see
+    persona = await getPersona(db, body.persona_id); // RLS: only personas you can see
     if (!persona) throw errors.notFound("Persona");
-    personaId = persona.id;
     const preferred = persona.definition.settings?.model;
     if (!model && isModelId(preferred) && isModelAvailable(preferred)) model = preferred;
   }
   const conversation = await createConversation(db, {
     title: (body.title as string | undefined)?.slice(0, 120),
     model,
-    personaId,
+    persona,
+    modelChosen: body.model !== undefined,
   });
   return json(req, { conversation }, 201);
 });

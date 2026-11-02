@@ -398,5 +398,114 @@ $$;
 revoke all on function public.persona_retention(integer) from public, anon;
 grant execute on function public.persona_retention(integer) to authenticated;
 
+-- =====================================================================
+-- v5: style experiments (A/B tests). Safe to re-run.
+-- Each new persona chat may be placed in one variant of an experiment (defined in src/lib/experiments.ts).
+-- =====================================================================
+alter table public.conversations
+  add column if not exists experiment text,
+  add column if not exists variant    text;
+create index if not exists conversations_experiment_idx on public.conversations (experiment, variant) where experiment is not null;
+
+-- Results per variant of one experiment, as counts (the app computes rates and confidence ranges).
+-- Admin only; no message text or user ids; variants with fewer than 5 users show counts only.
+create or replace function public.experiment_stats(p_experiment text)
+returns table (
+  variant text, users bigint, conversations bigint, replies bigint, enough_data boolean,
+  answered bigint, answerable bigint, median_reply_seconds numeric, avg_words numeric, avg_bubbles numeric,
+  thumbs_up bigint, thumbs_down bigint, top_down_reason text,
+  day1_returned bigint, day1_eligible bigint, day7_returned bigint, day7_eligible bigint,
+  user_messages_per_chat numeric
+)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can read stats.' using errcode = '42501';
+  end if;
+  return query
+  with chats as (
+    select c.id, c.user_id, c.variant, c.created_at
+    from public.conversations c
+    where c.experiment = p_experiment and c.variant is not null
+  ),
+  ordered as (
+    select m.conversation_id, m.role, m.kind, m.reply_id, m.created_at, m.words,
+           lead(m.role) over w as next_role, lead(m.created_at) over w as next_at
+    from public.messages m
+    where m.conversation_id in (select id from chats)
+    window w as (partition by m.conversation_id order by m.created_at)
+  ),
+  replies as (
+    select o.reply_id, o.conversation_id,
+           count(*) as bubbles, sum(o.words) as words, max(o.created_at) as last_at,
+           (array_agg(o.next_role order by o.created_at desc))[1] as next_role,
+           (array_agg(o.next_at order by o.created_at desc))[1] as next_at
+    from ordered o
+    where o.role = 'assistant' and o.kind = 'reply' and o.reply_id is not null
+    group by o.reply_id, o.conversation_id
+  ),
+  scored as (
+    select ch.variant, ch.user_id, r.*,
+           (r.next_role = 'user' and r.next_at - r.last_at <= interval '24 hours') as replied,
+           (r.next_role is null and r.last_at > now() - interval '24 hours') as pending,
+           f.rating, f.reason
+    from replies r
+    join chats ch on ch.id = r.conversation_id
+    left join public.feedback f on f.reply_id = r.reply_id and f.user_id = ch.user_id
+    where not exists (
+      select 1 from public.messages x
+      where x.conversation_id = r.conversation_id and x.role = 'user' and x.crisis
+        and x.created_at between r.last_at - interval '24 hours' and r.last_at
+    )
+  ),
+  reply_agg as (
+    select s.variant,
+           count(*) as replies,
+           count(*) filter (where s.replied) as answered,
+           count(*) filter (where not s.pending) as answerable,
+           percentile_cont(0.5) within group (order by extract(epoch from s.next_at - s.last_at)) filter (where s.replied) as median_reply_seconds,
+           avg(s.words) as avg_words, avg(s.bubbles) as avg_bubbles,
+           count(*) filter (where s.rating = 1) as thumbs_up,
+           count(*) filter (where s.rating = -1) as thumbs_down,
+           mode() within group (order by s.reason) filter (where s.rating = -1) as top_down_reason
+    from scored s group by s.variant
+  ),
+  chat_agg as (
+    select ch.variant,
+           count(distinct ch.user_id) as users,
+           count(*) as conversations,
+           count(*) filter (where ch.created_at <= now() - interval '48 hours' and exists (
+             select 1 from public.messages m where m.conversation_id = ch.id and m.role = 'user'
+               and m.created_at between ch.created_at + interval '20 hours' and ch.created_at + interval '48 hours')) as d1_returned,
+           count(*) filter (where ch.created_at <= now() - interval '48 hours') as d1_eligible,
+           count(*) filter (where ch.created_at <= now() - interval '8 days' and exists (
+             select 1 from public.messages m where m.conversation_id = ch.id and m.role = 'user'
+               and m.created_at >= ch.created_at + interval '7 days')) as d7_returned,
+           count(*) filter (where ch.created_at <= now() - interval '8 days') as d7_eligible,
+           avg((select count(*) from public.messages m where m.conversation_id = ch.id and m.role = 'user')) as msgs
+    from chats ch group by ch.variant
+  )
+  select c.variant, c.users, c.conversations, coalesce(r.replies, 0), c.users >= 5,
+         case when c.users >= 5 then coalesce(r.answered, 0) end,
+         case when c.users >= 5 then coalesce(r.answerable, 0) end,
+         case when c.users >= 5 then round(r.median_reply_seconds::numeric, 0) end,
+         case when c.users >= 5 then round(r.avg_words, 1) end,
+         case when c.users >= 5 then round(r.avg_bubbles, 2) end,
+         case when c.users >= 5 then coalesce(r.thumbs_up, 0) end,
+         case when c.users >= 5 then coalesce(r.thumbs_down, 0) end,
+         case when c.users >= 5 then r.top_down_reason end,
+         case when c.users >= 5 then c.d1_returned end,
+         case when c.users >= 5 then c.d1_eligible end,
+         case when c.users >= 5 then c.d7_returned end,
+         case when c.users >= 5 then c.d7_eligible end,
+         case when c.users >= 5 then round(c.msgs, 1) end
+  from chat_agg c
+  left join reply_agg r on r.variant = c.variant
+  order by c.variant;
+end;
+$$;
+revoke all on function public.experiment_stats(text) from public, anon;
+grant execute on function public.experiment_stats(text) to authenticated;
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

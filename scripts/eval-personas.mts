@@ -11,6 +11,7 @@ import { generateText } from "ai";
 import { splitBubbles, joinBubbles } from "../src/lib/bubbles";
 import { personaInputSchema, type PersonaDefinition } from "../src/lib/persona-schema";
 import { buildPersonaPrompt, detectCrisis, detectMinor } from "../src/lib/prompt-builder";
+import { applyVariant, getExperiment } from "../src/lib/experiments";
 import { resolveModel } from "../src/lib/providers";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -32,9 +33,18 @@ type Persona = { slug: string; name: string; definition: PersonaDefinition };
 
 const args = process.argv.slice(2);
 const runs = Number(args[args.indexOf("--runs") + 1]) || 1;
-const VALUE_FLAGS = ["--runs", "--scenario", "--label", "--model"];
+const VALUE_FLAGS = ["--runs", "--scenario", "--label", "--model", "--variant"];
 const modelOverride = args.includes("--model") ? args[args.indexOf("--model") + 1] : null;
 const only = args.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(args[i - 1]));
+// --variant bubbles-v1:one-bubble → test personas as they'd behave in that experiment variant.
+const variantArg = args.includes("--variant") ? args[args.indexOf("--variant") + 1] : null;
+const [expId, variantId] = variantArg?.split(":") ?? [];
+const experiment = variantArg ? getExperiment(expId) : null;
+const variant = experiment?.variants.find((v) => v.id === variantId) ?? null;
+if (variantArg && !variant) {
+  console.error(`Unknown variant "${variantArg}". Use <experiment>:<variant> from src/lib/experiments.ts.`);
+  process.exit(1);
+}
 const scenarioFilter = args.includes("--scenario") ? args[args.indexOf("--scenario") + 1] : null;
 
 const scenarios: Scenario[] = JSON.parse(readFileSync(join(ROOT, "evals/scenarios.json"), "utf8")).scenarios;
@@ -44,7 +54,9 @@ const personas: Persona[] = readdirSync(join(ROOT, "personas"))
     const raw = JSON.parse(readFileSync(join(ROOT, "personas", f), "utf8"));
     return { slug: raw.slug, name: raw.name, definition: personaInputSchema.parse(raw).definition };
   })
-  .filter((p) => !only.length || only.includes(p.slug));
+  .filter((p) => !only.length || only.includes(p.slug))
+  .filter((p) => !experiment || experiment.appliesTo(p))
+  .map((p) => ({ ...p, definition: applyVariant(p.definition, variant) }));
 
 function expectationsFor(p: Persona, s: Scenario): Expect {
   const file = join(ROOT, "evals/expectations", `${p.slug}.json`);
@@ -179,7 +191,7 @@ type Turn = { user: string; bubbles: string[]; ms: number; checks: Check[] };
 type Result = { persona: string; scenario: string; run: number; model: string; turns: Turn[]; judge: Judgement | null; error?: string };
 
 async function runScenario(p: Persona, s: Scenario, run: number): Promise<Result> {
-  const { model, languageModel, providerOptions } = resolveModel(modelOverride ?? p.definition.settings.model);
+  const { model, languageModel, providerOptions } = resolveModel(modelOverride ?? variant?.model ?? p.definition.settings.model);
   const expect = expectationsFor(p, s);
   const history: { role: "user" | "assistant"; content: string }[] = [];
   const turns: Turn[] = [];
@@ -191,6 +203,7 @@ async function runScenario(p: Persona, s: Scenario, run: number): Promise<Result
         stage: "new",
         crisis: detectCrisis(user),
         minor: detectMinor(user),
+        styleNote: variant?.style?.note,
       });
       history.push({ role: "user", content: user });
       const started = Date.now();
@@ -279,7 +292,7 @@ for (const s of summary) {
 const outDir = join(ROOT, "evals/reports");
 mkdirSync(outDir, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const label = args.includes("--label") ? args[args.indexOf("--label") + 1] : "";
+const label = [args.includes("--label") ? args[args.indexOf("--label") + 1] : "", variantArg ?? ""].filter(Boolean).join(" · ");
 writeFileSync(join(outDir, `${stamp}.json`), JSON.stringify({ label, summary, results }, null, 2));
 writeFileSync(join(outDir, `${stamp}.html`), renderHtml(label, summary, results));
 writeFileSync(join(outDir, "latest.html"), renderHtml(label, summary, results));

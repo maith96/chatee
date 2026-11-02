@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getStats, isAdmin, REASON_LABELS, type PersonaStatsRow, type RetentionRow } from "@/lib/feedback";
 import { getModel, isModelId } from "@/lib/models";
+import { describeVariant, EXPERIMENTS } from "@/lib/experiments";
+import { rates, verdict, type ExperimentRow, type Rate } from "@/lib/experiment-results";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Persona stats" };
@@ -28,7 +30,7 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
   const params = await searchParams;
   const days = RANGES.includes(Number(params.days)) ? Number(params.days) : 30;
   const kind = params.kind === "checkin" ? "checkin" : "reply";
-  const { replies, retention } = await getStats(db, days);
+  const { replies, retention, experiments } = await getStats(db, days);
   const rows = replies.filter((r) => r.kind === kind);
 
   return (
@@ -48,7 +50,16 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
         </div>
       </div>
 
-      <h2 className="mt-8 text-lg font-semibold">{kind === "checkin" ? "Check-ins" : "Replies"} by persona and model</h2>
+      <h2 className="mt-8 text-lg font-semibold">Experiments</h2>
+      <p className="mt-1 text-sm text-muted">
+        New persona chats are split at random between variants (defined in <code>src/lib/experiments.ts</code>). Whole experiment,
+        not limited to the date range. Ranges are 95% confidence; a difference counts as clear at p &lt; 0.05 with 20+ samples each.
+      </p>
+      {EXPERIMENTS.map((e) => (
+        <ExperimentCard key={e.id} experiment={e} rows={experiments.find((x) => x.id === e.id)?.rows ?? null} />
+      ))}
+
+      <h2 className="mt-10 text-lg font-semibold">{kind === "checkin" ? "Check-ins" : "Replies"} by persona and model</h2>
       <p className="mt-1 text-sm text-muted">
         <b>Thumbs up</b> and <b>day-7 return</b> are the main measures. A reply counts as answered if the user texted back within 24 hours.
       </p>
@@ -93,6 +104,76 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
       />
     </main>
   );
+}
+
+function ExperimentCard({ experiment, rows }: { experiment: (typeof EXPERIMENTS)[number]; rows: ExperimentRow[] | null }) {
+  const byId = new Map((rows ?? []).map((r) => [r.variant, r]));
+  const control = byId.get(experiment.variants[0].id);
+  return (
+    <section className="mt-4 rounded-2xl border border-border p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold">{experiment.id}</h3>
+        <span className={`rounded-full px-2 py-0.5 text-xs ${experiment.active ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-panel text-muted"}`}>
+          {experiment.active ? "Running" : "Ended"}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-muted">{experiment.description}</p>
+      {rows === null ? (
+        <p className="mt-3 text-sm text-muted">Run the latest supabase/schema.sql (v5) to start collecting results.</p>
+      ) : (
+        <>
+          <Table
+            empty="No chats in this experiment yet."
+            head={["Variant", "What changes", "Users", "Chats", "Thumbs up", "Day-7 return", "Day-1 return", "Replies answered", "User msgs / chat", "Words", "Bubbles", "Top 👎 reason"]}
+            rows={experiment.variants.map((v, i) => {
+              const r = byId.get(v.id);
+              const x = r ? rates(r) : null;
+              return [
+                i === 0 && v.id !== "control" ? `${v.id} (control)` : v.id,
+                describeVariant(v),
+                r?.users ?? 0,
+                r?.conversations ?? 0,
+                range(x?.thumbs ?? null),
+                range(x?.day7 ?? null),
+                range(x?.day1 ?? null),
+                range(x?.answered ?? null),
+                num(r?.user_messages_per_chat ?? null),
+                num(r?.avg_words ?? null),
+                num(r?.avg_bubbles ?? null),
+                r?.top_down_reason ? REASON_LABELS[r.top_down_reason] : "–",
+              ];
+            })}
+            dim={experiment.variants.map((v) => !byId.get(v.id)?.enough_data)}
+          />
+          <ul className="mt-3 space-y-1 text-sm">
+            {experiment.variants.slice(1).map((v) => {
+              const r = byId.get(v.id);
+              const result = r ? verdict(control, r) : { status: "early" as const, findings: [] };
+              return (
+                <li key={v.id}>
+                  <b>{v.id}</b> vs control:{" "}
+                  {result.status === "early" && <span className="text-muted">too early to tell (needs 5+ users and 20+ samples per variant).</span>}
+                  {result.status === "no-difference" && <span>no clear difference yet.</span>}
+                  {result.status === "clear" &&
+                    result.findings.map((f, i) => (
+                      <span key={f.metric} className={f.better ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}>
+                        {i > 0 ? "; " : ""}
+                        {f.better ? "better" : "worse"} on {f.metric} ({f.diff > 0 ? "+" : ""}{Math.round(f.diff * 100)} pts){f.main ? "" : " (secondary)"}
+                      </span>
+                    ))}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+function range(r: Rate) {
+  if (!r) return "–";
+  return `${Math.round(r.rate * 100)}% (${Math.round(r.low * 100)}–${Math.round(r.high * 100)}%, n=${r.n})`;
 }
 
 function Tabs({ param, value, options, other }: { param: string; value: string; options: string[][]; other: Record<string, string> }) {

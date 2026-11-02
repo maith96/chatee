@@ -1,6 +1,8 @@
 // Thumbs up/down on persona replies, and the admin-only stats built from them.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingSchema } from "./db-errors";
+import { EXPERIMENTS } from "./experiments";
+import type { ExperimentRow } from "./experiment-results";
 
 export const FEEDBACK_REASONS = ["too_long", "too_short", "out_of_character", "repetitive", "too_much", "other"] as const;
 export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
@@ -117,14 +119,27 @@ function numbers<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 export async function getStats(db: SupabaseClient, days: number) {
-  const [replies, retention] = await Promise.all([
+  const [replies, retention, experiments] = await Promise.all([
     db.rpc("persona_stats", { p_days: days }),
     db.rpc("persona_retention", { p_days: days }),
+    getExperimentStats(db),
   ]);
   if (replies.error) throw replies.error;
   if (retention.error) throw retention.error;
   return {
     replies: numbers<PersonaStatsRow>(replies.data ?? []),
     retention: numbers<RetentionRow>(retention.data ?? []),
+    experiments,
   };
+}
+
+/** Per-variant counts for every experiment defined in code (whole experiment, not limited to `days`). */
+export async function getExperimentStats(db: SupabaseClient) {
+  return Promise.all(
+    EXPERIMENTS.map(async (e) => {
+      const { data, error } = await db.rpc("experiment_stats", { p_experiment: e.id });
+      if (error && !isMissingSchema(error) && (error as { code?: string }).code !== "PGRST202") throw error;
+      return { id: e.id, rows: error ? null : numbers<ExperimentRow>(data ?? []) }; // null: schema v5 not run yet
+    }),
+  );
 }

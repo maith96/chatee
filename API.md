@@ -103,7 +103,8 @@ The title is set automatically from the first message if you leave it as the def
                   "kind": "reply", "reply_id": "uuid", ... } ],
   "feedback": [ { "reply_id": "uuid", "rating": 1, "reason": null } ] }
 ```
-All bubbles of one assistant reply share a `reply_id`. `feedback` holds your ratings of this chat's replies.
+All bubbles of one assistant reply share a `reply_id`. Conversations also have `experiment` and `variant`
+(a style test the chat is part of, or null); the server already applies it, including how many bubbles replies have. `feedback` holds your ratings of this chat's replies.
 
 ### `PATCH /conversations/{id}`
 Body: `{ "title"?: string, "model"?: string }` → `{ "conversation": { ... } }`
@@ -199,7 +200,7 @@ Removes your rating → `204`.
 ### `GET /stats?days=30` (admins only)
 Aggregate persona metrics: `{ "days": 30, "replies": [ ... ], "retention": [ ... ] }`, by persona, model and kind
 (reply / check-in). Counts and averages only, no message text or user ids. Groups with fewer than 5 users have
-`enough_data: false` and no metrics. Others get `403 forbidden`.
+`enough_data: false` and no metrics. Also `experiments`: per-variant counts for each style experiment. Others get `403 forbidden`.
 
 ## Quick test with curl
 

@@ -30,7 +30,15 @@ export const newReplyId = () => randomUUID();
 export function assistantRows(
   conversationId: string,
   bubbles: string[],
-  opts: { replyId: string; model: string; persona: Persona | null; kind?: "reply" | "checkin"; latencyMs?: number },
+  opts: {
+    replyId: string;
+    model: string;
+    persona: Persona | null;
+    kind?: "reply" | "checkin";
+    latencyMs?: number;
+    /** "experiment:variant" when the chat is in a style experiment. */
+    variant?: string | null;
+  },
 ) {
   const version = promptVersion(opts.persona);
   return bubbles.map((content, i) => ({
@@ -40,6 +48,7 @@ export function assistantRows(
     model: opts.model,
     kind: opts.kind ?? ("reply" as const),
     reply_id: opts.replyId,
+    variant: opts.variant ?? undefined,
     prompt_version: version,
     words: countWords(content),
     emoji: countEmoji(content),

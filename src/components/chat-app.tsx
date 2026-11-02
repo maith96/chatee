@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Conversation } from "@/lib/chat-service";
 import { DEFAULT_MODEL, type ModelId, type ModelInfo } from "@/lib/models";
+import { activeVariant } from "@/lib/experiments";
 import type { PersonaSummary } from "@/lib/personas";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "./avatar";
@@ -77,6 +78,9 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   const active = conversations.find((c) => c.id === activeId) ?? null;
   const personaById = (id: string | null | undefined) => (id ? (personas.find((p) => p.id === id) ?? null) : null);
   const currentPersona = active ? personaById(active.persona_id) : (newChatPersona ?? null);
+  // A chat in a style experiment may use a different number of bubbles than the persona normally does.
+  const bubbles = active ? activeVariant(active.experiment, active.variant)?.style?.bubbles : undefined;
+  const chatPersona = currentPersona && bubbles !== undefined ? { ...currentPersona, multi_bubble: bubbles > 1, max_bubbles: bubbles } : currentPersona;
   const choosing = !active && newChatPersona === undefined;
 
   function openConversation(c: Conversation) {
@@ -182,7 +186,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
             {admin && <a href="/admin/stats" className="text-accent hover:underline">Stats</a>}
           </div>
           <p className="mt-3 text-xs text-muted">
-            To improve personas we measure reply style and engagement (like reply length and thumbs up/down), not what you say.
+            To improve personas we measure reply style and engagement (like reply length and thumbs up/down), not what you say, and try small style variations.
           </p>
         </div>
       </aside>
@@ -227,7 +231,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
         <ChatView
           key={activeId ?? `new-${newChatPersona?.id ?? "assistant"}`}
           conversationId={activeId}
-          persona={currentPersona}
+          persona={chatPersona}
           pendingText={pending?.id === activeId ? pending.text : undefined}
           model={model}
           onStart={startConversation}
