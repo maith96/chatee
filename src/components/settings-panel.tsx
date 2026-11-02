@@ -24,6 +24,7 @@ const timezone = () => {
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [news, setNews] = useState<News | null>(null);
   const [personalize, setPersonalize] = useState<boolean | null>(null);
+  const [strangers, setStrangers] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,7 +37,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       .catch((e: Error) => setError(e.message));
     fetch("/api/v1/me")
       .then((res) => res.json())
-      .then((body) => setPersonalize(body?.user?.personalize ?? true))
+      .then((body) => {
+        setPersonalize(body?.user?.personalize ?? true);
+        setStrangers(body?.user?.strangers ?? true);
+      })
       .catch(() => {});
   }, []);
 
@@ -52,6 +56,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   function toggle<T extends string>(list: T[], value: T) {
     return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
+  }
+
+  async function saveStrangers(on: boolean) {
+    setStrangers(on);
+    await fetch("/api/v1/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ strangers: on }) });
   }
 
   async function savePersonalize(on: boolean) {
@@ -135,6 +144,17 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             </>
           )}
         </section>
+
+        {strangers !== null && (
+          <section aria-label="Strangers" className="mb-6">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">Strangers</h3>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={strangers} onChange={(e) => saveStrangers(e.target.checked)} className="accent-[var(--accent)]" />
+              AI strangers can message me
+            </label>
+            <p className="mt-1 text-xs text-muted">At most one new person a day, never at night. You can still use “Meet someone new” anytime.</p>
+          </section>
+        )}
 
         {personalize !== null && (
           <section aria-label="Style">

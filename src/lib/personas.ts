@@ -1,6 +1,7 @@
 // Reading personas. Row Level Security decides what each user can see:
 // public + unlisted personas, built-ins, and their own.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingSchema } from "./db-errors";
 import { personaDefinitionSchema, type PersonaDefinition, type Visibility } from "./persona-schema";
 
 export type Persona = {
@@ -14,12 +15,26 @@ export type Persona = {
   visibility: Visibility;
   is_romantic: boolean;
   definition: PersonaDefinition;
+  /** "stranger" = from the shared pool of AI strangers (schema v8). */
+  kind?: "persona" | "stranger";
+  status?: string;
+  tags?: { city?: string; country?: string; openers?: string[]; region?: string } & Record<string, unknown>;
+  images?: string[];
   created_at: string;
   updated_at: string;
 };
 
-const FIELDS =
+const LEGACY_FIELDS =
   "id, slug, owner_id, name, tagline, avatar_emoji, avatar_url, visibility, is_romantic, definition, created_at, updated_at";
+const FIELDS = `${LEGACY_FIELDS}, kind, status, tags, images`;
+
+/** Runs a persona query, retrying without the newer columns if the database hasn't been updated yet. */
+async function query<T>(run: (fields: string) => PromiseLike<{ data: unknown; error: unknown }>) {
+  let res = await run(FIELDS);
+  if (res.error && isMissingSchema(res.error)) res = await run(LEGACY_FIELDS);
+  if (res.error) throw res.error;
+  return res.data as T;
+}
 
 /** Public summary (no full character sheet), for lists and pickers. */
 export function summarize(p: Persona, userId: string) {
@@ -33,6 +48,9 @@ export function summarize(p: Persona, userId: string) {
     is_romantic: p.is_romantic,
     is_builtin: p.owner_id === null,
     is_mine: p.owner_id === userId,
+    is_stranger: p.kind === "stranger",
+    images: p.images ?? [],
+    city: p.kind === "stranger" ? [p.tags?.city, p.tags?.country].filter(Boolean).join(", ") || null : null,
     bio: p.definition?.identity?.bio ?? null,
     role: p.definition?.relationship?.role ?? null,
     age: p.definition?.identity?.age ?? null,
@@ -55,18 +73,18 @@ function normalize(p: Persona): Persona {
 }
 
 export async function listPersonas(db: SupabaseClient, userId: string) {
-  const { data, error } = await db
-    .from("personas")
-    .select(FIELDS)
-    .or(`visibility.eq.public,owner_id.eq.${userId}`)
-    .order("owner_id", { ascending: true, nullsFirst: true })
-    .order("name", { ascending: true });
-  if (error) throw error;
-  return (data as Persona[]).map(normalize);
+  const data = await query<Persona[]>((f) =>
+    db
+      .from("personas")
+      .select(f)
+      .or(`visibility.eq.public,owner_id.eq.${userId}`)
+      .order("owner_id", { ascending: true, nullsFirst: true })
+      .order("name", { ascending: true }),
+  );
+  return data.filter((p) => p.kind !== "stranger").map(normalize);
 }
 
 export async function getPersona(db: SupabaseClient, id: string) {
-  const { data, error } = await db.from("personas").select(FIELDS).eq("id", id).maybeSingle();
-  if (error) throw error;
-  return data ? normalize(data as Persona) : null;
+  const data = await query<Persona | null>((f) => db.from("personas").select(f).eq("id", id).maybeSingle());
+  return data ? normalize(data) : null;
 }

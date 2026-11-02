@@ -143,8 +143,15 @@ AI "strangers" come from a shared pool that admins build at **`/admin/strangers`
 Africa). Each has a validated character sheet (18+, never romantic), tags for matching, opening messages, and image
 prompts (a main photo, then "same person" variants). Make the photos, upload them (shrunk to WebP in the browser,
 stored in the public `persona-images` bucket, only admins can write), then **Approve → trial**, **Make active** or
-**Retire**. Drafts are admin-only; approved strangers never appear in the persona picker. Part 2 (inbox, "Meet someone
-new", strangers texting first) and part 3 (matching, leaderboard) are next.
+**Retire**. Drafts are admin-only; approved strangers never appear in the persona picker. 
+
+**Part 2: strangers reach users** (`src/lib/stranger-contacts.ts`). When the app opens (`POST /api/v1/strangers/sync`),
+a stranger may text the user first: at most one a day, never between 22:00 and 07:00 local time, not on the user's first
+day, and none after the user leaves two in a row unanswered (until they reply to one or meet someone). Their first message
+lands in **Message requests**; replying accepts it, **Ignore** hides it, **Block** stops that stranger for good.
+**Meet someone new** (up to 5 a day) starts a chat with a random new stranger who says hi first. Strangers show an **AI**
+badge everywhere, have a photo gallery and city in their profile, don't adapt their style, and aren't in style
+experiments. Users can switch them off in Settings. Part 3 (matching to similar users, leaderboard) is next.
 
 ## Google sign-in
 

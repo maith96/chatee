@@ -725,5 +725,39 @@ drop policy if exists "admins delete persona images" on storage.objects;
 create policy "admins delete persona images" on storage.objects
   for delete to authenticated using (bucket_id = 'persona-images' and public.is_admin());
 
+-- =====================================================================
+-- v9: strangers reach users (message requests, "Meet someone new"). Safe to re-run.
+-- =====================================================================
+-- A stranger's first message is its own kind of message.
+alter table public.messages drop constraint if exists messages_kind_check;
+alter table public.messages add constraint messages_kind_check check (kind in ('reply', 'checkin', 'opener'));
+
+-- Which strangers each user has met, and how they responded.
+-- origin: 'dm' = the stranger texted first, 'meet' = the user tapped "Meet someone new".
+-- state: 'request' (unanswered), 'accepted' (the user replied), 'ignored', 'blocked' (never again).
+create table if not exists public.stranger_contacts (
+  user_id          uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  persona_id       uuid not null references public.personas(id) on delete cascade,
+  conversation_id  uuid references public.conversations(id) on delete set null,
+  origin           text not null check (origin in ('dm', 'meet')),
+  state            text not null default 'request' check (state in ('request', 'accepted', 'ignored', 'blocked')),
+  created_at       timestamptz not null default now(),
+  responded_at     timestamptz,
+  primary key (user_id, persona_id)
+);
+create index if not exists stranger_contacts_user_idx on public.stranger_contacts (user_id, created_at desc);
+alter table public.stranger_contacts enable row level security;
+grant select, insert, update, delete on public.stranger_contacts to authenticated;
+drop policy if exists "own stranger contacts" on public.stranger_contacts;
+create policy "own stranger contacts" on public.stranger_contacts
+  for all using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.personas p where p.id = persona_id and p.kind = 'stranger' and p.status in ('trial', 'active'))
+  );
+
+-- Users can switch off strangers messaging them.
+alter table public.profiles add column if not exists strangers_enabled boolean not null default true;
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

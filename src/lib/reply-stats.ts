@@ -34,7 +34,7 @@ export function assistantRows(
     replyId: string;
     model: string;
     persona: Persona | null;
-    kind?: "reply" | "checkin";
+    kind?: "reply" | "checkin" | "opener";
     latencyMs?: number;
     /** "experiment:variant" when the chat is in a style experiment. */
     variant?: string | null;

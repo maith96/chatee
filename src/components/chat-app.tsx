@@ -5,6 +5,7 @@ import type { Conversation } from "@/lib/chat-service";
 import { DEFAULT_MODEL, type ModelId, type ModelInfo } from "@/lib/models";
 import { activeVariant } from "@/lib/experiments";
 import type { PersonaSummary } from "@/lib/personas";
+import type { ContactView } from "@/lib/stranger-contacts";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "./avatar";
 import { Logo } from "./logo";
@@ -24,6 +25,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message ?? `Request failed (${res.status})`);
   return data as T;
+}
+
+const timezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Shown next to every AI stranger, so nobody mistakes them for a real person. */
+function AiBadge() {
+  return <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">AI</span>;
 }
 
 function timeAgo(iso: string) {
@@ -50,6 +64,18 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
   const [showMemory, setShowMemory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // AI strangers the user has met. "request" ones wait in Message requests until the user replies.
+  const [contacts, setContacts] = useState<ContactView[]>([]);
+  const [meeting, setMeeting] = useState(false);
+  const [meetError, setMeetError] = useState<string | null>(null);
+
+  const loadContacts = useCallback(async () => {
+    try {
+      setContacts((await api<{ contacts: ContactView[] }>("/strangers")).contacts);
+    } catch {
+      /* strangers not set up yet */
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -64,6 +90,13 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
     refresh();
+    // Opening the app: a stranger may have texted (the server decides; at most one a day, never at night).
+    api<{ contacts: ContactView[]; delivered: string | null }>("/strangers/sync", { method: "POST", body: JSON.stringify({ timezone: timezone() }) })
+      .then((d) => {
+        setContacts(d.contacts);
+        if (d.delivered) refresh();
+      })
+      .catch(() => {});
     // Only models whose provider has an API key on the server.
     api<{ default: ModelId; models: ModelInfo[] }>("/models")
       .then((data) => {
@@ -78,7 +111,16 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   }, [refresh]);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
-  const personaById = (id: string | null | undefined) => (id ? (personas.find((p) => p.id === id) ?? null) : null);
+  const personaById = (id: string | null | undefined) =>
+    id ? (personas.find((p) => p.id === id) ?? contacts.find((c) => c.persona.id === id)?.persona ?? null) : null;
+  const contactByConversation = (id: string) => contacts.find((c) => c.conversation_id === id);
+  const requests = contacts.filter((c) => c.state === "request" && c.conversation_id);
+  // Message requests have their own list; ignored and blocked strangers' chats are hidden.
+  const isRequestChat = (c: Conversation) => {
+    const state = contactByConversation(c.id)?.state;
+    return state === "request" || state === "ignored" || state === "blocked";
+  };
+  const activeContact = active ? contactByConversation(active.id) : undefined;
   const currentPersona = active ? personaById(active.persona_id) : (newChatPersona ?? null);
   // A chat in a style experiment may use a different number of bubbles than the persona normally does.
   const bubbles = active ? activeVariant(active.experiment, active.variant)?.style?.bubbles : undefined;
@@ -118,6 +160,32 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
     setActiveId(conversation.id);
   }
 
+  async function meetSomeone() {
+    setMeeting(true);
+    setMeetError(null);
+    try {
+      const { conversation } = await api<{ conversation: Conversation }>("/strangers/meet", {
+        method: "POST",
+        body: JSON.stringify({ timezone: timezone() }),
+      });
+      await Promise.all([refresh(), loadContacts()]);
+      setConversations((list) => (list.some((x) => x.id === conversation.id) ? list : [conversation, ...list]));
+      openConversation(conversation);
+    } catch (e) {
+      setMeetError((e as Error).message);
+    } finally {
+      setMeeting(false);
+    }
+  }
+
+  async function respond(contact: ContactView, state: "ignored" | "blocked") {
+    if (state === "blocked" && !window.confirm(`Block ${contact.persona.name}? They won't message you again.`)) return;
+    await api(`/strangers/${contact.persona.id}`, { method: "PATCH", body: JSON.stringify({ state }) });
+    // Their chat disappears from the lists; a blocked stranger never messages again.
+    setContacts((list) => list.map((c) => (c.persona.id === contact.persona.id ? { ...c, state } : c)));
+    if (activeId === contact.conversation_id) newChat();
+  }
+
   async function rename(c: Conversation) {
     const title = window.prompt("Rename conversation", c.title)?.trim();
     if (!title || title === c.title) return;
@@ -151,20 +219,49 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
           className="mb-6 flex items-center gap-3 rounded-2xl border border-dashed border-border px-4 py-3 text-left hover:bg-accent-soft">
           <span className="text-xl leading-none">+</span> New chat
         </button>
+        <button onClick={meetSomeone} disabled={meeting}
+          className="-mt-4 mb-2 flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-left hover:bg-accent-soft disabled:opacity-60">
+          <span className="text-xl leading-none">👋</span> {meeting ? "Finding someone…" : "Meet someone new"}
+        </button>
+        {meetError && <p className="mb-2 px-1 text-xs text-red-500">{meetError}</p>}
+        <div className="mb-4" />
+
+        {requests.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-widest text-muted">Message requests ({requests.length})</p>
+            <div className="space-y-1">
+              {requests.map((r) => (
+                <button key={r.persona.id}
+                  onClick={() => { const c = conversations.find((x) => x.id === r.conversation_id); if (c) openConversation(c); }}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left ${r.conversation_id === activeId ? "bg-accent-soft" : "hover:bg-accent-soft/60"}`}>
+                  <Avatar persona={r.persona} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5"><span className="truncate font-medium">{r.persona.name}</span><AiBadge /></div>
+                    <div className="truncate text-xs text-muted">{r.preview?.content ?? "New message"}</div>
+                  </div>
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent" aria-label="Unread" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-widest text-muted">Recent</p>
         <nav className="-mx-1 flex-1 space-y-1 overflow-y-auto px-1">
           {listError && <p className="px-2 text-sm text-red-500">{listError}</p>}
           {!listError && conversations.length === 0 && <p className="px-2 text-sm text-muted">No chats yet.</p>}
-          {conversations.map((c) => (
+          {conversations.filter((c) => !isRequestChat(c)).map((c) => (
             <div key={c.id}
               className={`group flex items-center rounded-2xl ${c.id === activeId ? "bg-accent-soft" : "hover:bg-accent-soft/60"}`}>
               <button onClick={() => openConversation(c)} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left">
                 <Avatar persona={personaById(c.persona_id)} size="sm" />
                 <div className="min-w-0">
-                  <div className="truncate">{personaById(c.persona_id)?.name ?? c.title}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate">{personaById(c.persona_id)?.name ?? c.title}</span>
+                    {personaById(c.persona_id)?.is_stranger && <AiBadge />}
+                  </div>
                   <div className="truncate text-xs text-muted">
-                    {personaById(c.persona_id) ? `${c.title} · ` : ""}{timeAgo(c.updated_at)}
+                    {personaById(c.persona_id) && c.title !== personaById(c.persona_id)?.name ? `${c.title} · ` : ""}{timeAgo(c.updated_at)}
                   </div>
                 </div>
               </button>
@@ -208,8 +305,13 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
               className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:opacity-80">
               <Avatar persona={currentPersona} size="sm" />
               <div className="min-w-0">
-                <div className="truncate font-medium">{currentPersona.name}</div>
-                {currentPersona.tagline && <div className="truncate text-xs text-muted">{currentPersona.tagline}</div>}
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate font-medium">{currentPersona.name}</span>
+                  {currentPersona.is_stranger && <AiBadge />}
+                </div>
+                {(currentPersona.tagline || currentPersona.city) && (
+                  <div className="truncate text-xs text-muted">{[currentPersona.city, currentPersona.tagline].filter(Boolean).join(" · ")}</div>
+                )}
               </div>
             </button>
           ) : (
@@ -228,6 +330,15 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
           <ModelPicker value={model} models={models} onChange={setModel} />
         </header>
 
+        {activeContact?.state === "request" && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-border bg-accent-soft/50 px-4 py-3 text-sm md:px-8">
+            <span className="flex-1">
+              <b>{activeContact.persona.name}</b> is an AI stranger who&apos;d like to chat. Reply to accept.
+            </span>
+            <button onClick={() => respond(activeContact, "ignored")} className="rounded-xl border border-border bg-surface px-3 py-1.5 hover:border-accent">Ignore</button>
+            <button onClick={() => respond(activeContact, "blocked")} className="rounded-xl border border-border bg-surface px-3 py-1.5 text-red-500 hover:border-red-400">Block</button>
+          </div>
+        )}
         {choosing ? (
           <PersonaPicker personas={personas} onChoose={choosePersona} />
         ) : (
@@ -238,7 +349,10 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
           pendingText={pending?.id === activeId ? pending.text : undefined}
           model={model}
           onStart={startConversation}
-          onReplied={refresh}
+          onReplied={() => {
+            refresh();
+            if (activeContact?.state === "request") loadContacts(); // replying accepted the request
+          }}
           onOpenProfile={() => setProfileOpen(true)}
         />
         )}

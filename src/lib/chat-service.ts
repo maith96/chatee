@@ -13,6 +13,7 @@ import { isMissingSchema } from "./db-errors";
 import { assignExperiment } from "./experiment-assign";
 import { activeVariant, applyVariant } from "./experiments";
 import { loadStyle } from "./personalize";
+import { acceptIfRequest } from "./stranger-contacts";
 import { loadNews, mentionedItems, recordMentions, scoreEngagement, type NewsContext } from "./news";
 import { refreshNewsIfStale } from "./news-digest";
 import { assistantRows, countWords, newReplyId } from "./reply-stats";
@@ -42,7 +43,7 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   model: string | null;
-  kind?: "reply" | "checkin";
+  kind?: "reply" | "checkin" | "opener";
   /** Shared by all bubbles of one assistant reply; feedback is given per reply. */
   reply_id?: string | null;
   created_at: string;
@@ -167,7 +168,7 @@ type NewMessage = {
   role: "user" | "assistant";
   content: string;
   model?: string;
-  kind?: "reply" | "checkin";
+  kind?: "reply" | "checkin" | "opener";
   created_at?: string;
   // Metadata for stats (see reply-stats.ts and schema v4).
   reply_id?: string;
@@ -281,7 +282,8 @@ export async function startReply(
   // A chat in a style experiment sees the persona with its variant's style.
   const { persona, styleNote, label: variantLabel } = personaForChat(basePersona, opts.conversation);
   // Per-user style (runs alongside saving the message). Never blocks a reply if it fails.
-  const stylePromise = persona ? loadStyle(db, persona).catch((err) => (console.error("Style load failed", err), null)) : Promise.resolve(null);
+  // Strangers keep their own style: they don't adapt to the user.
+  const stylePromise = persona && persona.kind !== "stranger" ? loadStyle(db, persona).catch((err) => (console.error("Style load failed", err), null)) : Promise.resolve(null);
   // Computed before the new message is saved, so "time since last message" is the real gap.
   const latest = Array.isArray(opts.content) ? opts.content.join("\n") : opts.content;
   // Today's news this persona has "seen" (skipped in a crisis). Never blocks a reply if it fails.
@@ -315,6 +317,8 @@ export async function startReply(
         })),
       );
   const userMessage = userMessages.at(-1)!;
+  // Replying to a stranger's message request accepts it.
+  if (persona?.kind === "stranger" && !isRetry) await acceptIfRequest(db, persona.id).catch((err) => console.error("Accept request failed", err));
   // Count each text towards the relationship (they were separate messages).
   if (persona && !isRetry) for (let i = 0; i < contents.length; i++) await bumpRelationship(db, persona.id);
 

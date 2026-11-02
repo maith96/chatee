@@ -205,6 +205,23 @@ Send `timezone` with your message requests so personas know the user's region.
 ### `POST /news/refresh` (admins only)
 Rebuilds the shared news digest now → `{ "status": "refreshed", "items": 45, "feeds": 98 }`.
 
+### `POST /strangers/sync`
+Call when the app opens: `{ "timezone": "Africa/Nairobi" }` → `{ "delivered": persona_id | null, "contacts": [...] }`.
+A stranger may text the user first (max one a day, never 22:00–07:00 local, not on day one, stops after two unanswered).
+Each contact: `{ persona: {...summary, is_stranger, images, city}, conversation_id, origin: "dm" | "meet", state, created_at, preview }`.
+Show `state: "request"` ones as **message requests**; hide `ignored`/`blocked` ones' chats. Always label strangers as AI.
+
+### `GET /strangers`
+Same `contacts` list, without sending a new stranger.
+
+### `POST /strangers/meet`
+`{ "timezone"?: "..." }` → `201 { "conversation": {...} }`, a chat with a new random stranger whose first message is already in it.
+Up to 5 a day (`429 limit_reached`); `404 no_strangers` when there's nobody new.
+
+### `PATCH /strangers/{persona_id}`
+`{ "state": "accepted" | "ignored" | "blocked" }`. Replying in the chat also accepts a request.
+`PATCH /me { "strangers": false }` stops strangers messaging first.
+
 ### `DELETE /memories/{id}`
 Forget one memory. → `204`
 

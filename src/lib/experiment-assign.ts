@@ -18,6 +18,7 @@ export function pickVariant(experiment: Experiment, chatId: string): Variant {
 
 /** The first active experiment for this persona, and the chat's variant in it. */
 export function assignExperiment(persona: Persona, chatId: string) {
+  if (persona.kind === "stranger") return null; // strangers have their own fixed style
   const experiment = EXPERIMENTS.find((e) => e.active && e.variants.length > 1 && e.appliesTo(persona));
   if (!experiment) return null;
   return { experiment, variant: pickVariant(experiment, chatId) };
