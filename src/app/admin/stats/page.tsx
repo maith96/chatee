@@ -9,12 +9,13 @@ import { rate, rates, verdict, type ExperimentRow, type Rate } from "@/lib/exper
 import { createClient } from "@/lib/supabase/server";
 import { REGION_LABELS, TOPIC_LABELS, isRegion, isTopic } from "@/lib/news-sources";
 import { RefreshNews } from "./refresh-news";
+import { getLeaderboard, MIN_USERS } from "@/lib/stranger-leaderboard";
 
 export const metadata = { title: "Persona stats" };
 
 const RANGES = [7, 30, 90];
 
-export default function StatsPage({ searchParams }: { searchParams: Promise<{ days?: string; kind?: string }> }) {
+export default function StatsPage({ searchParams }: { searchParams: Promise<{ days?: string; kind?: string; segment?: string }> }) {
   return (
     <Suspense fallback={<div className="p-8 text-muted">Loading stats…</div>}>
       <Stats searchParams={searchParams} />
@@ -22,7 +23,7 @@ export default function StatsPage({ searchParams }: { searchParams: Promise<{ da
   );
 }
 
-async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; kind?: string }> }) {
+async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; kind?: string; segment?: string }> }) {
   await connection();
   const db = await createClient();
   const { data } = await db.auth.getUser();
@@ -32,7 +33,8 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
   const params = await searchParams;
   const days = RANGES.includes(Number(params.days)) ? Number(params.days) : 30;
   const kind = params.kind === "checkin" ? "checkin" : "reply";
-  const { replies, retention, experiments, news } = await getStats(db, days);
+  const segment = params.segment && /^[a-z]+\.[a-z]+\.[a-z]+$/.test(params.segment) ? params.segment : undefined;
+  const [{ replies, retention, experiments, news }, strangers] = await Promise.all([getStats(db, days), getLeaderboard(db, segment)]);
   const rows = replies.filter((r) => r.kind === kind);
 
   return (
@@ -89,6 +91,51 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
         ])}
         dim={rows.map((r) => !r.enough_data)}
       />
+
+      <h2 className="mt-10 text-lg font-semibold">Strangers</h2>
+      {!strangers ? (
+        <p className="mt-2 text-sm text-muted">Run the latest supabase/schema.sql (v8–v10) to see how strangers do.</p>
+      ) : (
+        <>
+          <p className="mt-1 max-w-3xl text-sm text-muted">
+            Score = how often people answer the first message (40%), reach 10+ messages (30%) and come back on a later day (30%); blocks count
+            as 0. Smoothed, with a 95% range. New strangers are matched to users 20% of the time so they collect data. Rates show once {MIN_USERS}+ people
+            have met them. Manage them in the <Link href="/admin/strangers" className="text-accent hover:underline">Stranger Studio</Link>.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-sm">
+            <Link href={`?${new URLSearchParams({ days: String(days), kind })}`}
+              className={`rounded-full border px-3 py-1 ${!segment ? "border-accent bg-accent text-white" : "border-border hover:border-accent"}`}>All users</Link>
+            {strangers.segments.map((g) => (
+              <Link key={g} href={`?${new URLSearchParams({ days: String(days), kind, segment: g })}`}
+                className={`rounded-full border px-3 py-1 ${segment === g ? "border-accent bg-accent text-white" : "border-border hover:border-accent"}`}>
+                {g.split(".").join(" · ")}
+              </Link>
+            ))}
+          </div>
+          {strangers.warnings.map((w) => (
+            <p key={w} className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">⚠️ {w}</p>
+          ))}
+          <Table
+            empty="No approved strangers yet."
+            head={["Stranger", "Status", "Who", "People", "Contacts", "Score", "Answered", "10+ messages", "Came back", "Blocked", "👍 / 👎", "Suggestion"]}
+            rows={strangers.board.map((r) => [
+              r.name,
+              r.status,
+              `${r.gender}, ${r.age_band}, ${r.city}`,
+              r.users,
+              r.contacts,
+              r.score === null ? "–" : `${Math.round(r.score * 100)} (${Math.round((r.low ?? 0) * 100)}–${Math.round((r.high ?? 0) * 100)})`,
+              pct(r.answered),
+              pct(r.reached10),
+              pct(r.returned),
+              r.blocked,
+              r.score === null ? "–" : `${r.thumbs.up} / ${r.thumbs.down}`,
+              r.suggestion ?? "",
+            ])}
+            dim={strangers.board.map((r) => r.score === null)}
+          />
+        </>
+      )}
 
       <h2 className="mt-10 text-lg font-semibold">News</h2>
       {!news ? (

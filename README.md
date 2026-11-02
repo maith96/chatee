@@ -151,7 +151,17 @@ day, and none after the user leaves two in a row unanswered (until they reply to
 lands in **Message requests**; replying accepts it, **Ignore** hides it, **Block** stops that stranger for good.
 **Meet someone new** (up to 5 a day) starts a chat with a random new stranger who says hi first. Strangers show an **AI**
 badge everywhere, have a photo gallery and city in their profile, don't adapt their style, and aren't in style
-experiments. Users can switch them off in Settings. Part 3 (matching to similar users, leaderboard) is next.
+experiments. Users can switch them off in Settings.
+
+**Part 3: matching** (`src/lib/stranger-matching.ts`). Users are grouped only by region (from their timezone), texting style
+(brief/medium/chatty, from message length) and the news topic they engage with most: never gender, ethnicity or looks. Each
+contact stores the user's group. A stranger's score is 0.4 × answered + 0.3 × reached 10+ messages + 0.3 × came back on a
+later day within a week (blocked = 0), computed by `stranger_performance()` (counts only). 80% of introductions use Thompson
+sampling on that score (the user's group if it has 5+ results, else their region, else everyone, with a small boost for
+the same region); 20% go to the least-tested strangers so new ones keep getting chances. Per user, no 4 strangers of the same
+gender or 3 from the same age band in a row. The **Strangers** leaderboard on `/admin/stats` (filterable by group) shows
+each stranger's score with a 95% range, suggests "ready to activate" / "consider retiring", and warns if the top strangers
+start to share one gender or age band.
 
 ## Google sign-in
 

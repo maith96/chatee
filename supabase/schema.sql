@@ -759,5 +759,53 @@ create policy "own stranger contacts" on public.stranger_contacts
 -- Users can switch off strangers messaging them.
 alter table public.profiles add column if not exists strangers_enabled boolean not null default true;
 
+-- =====================================================================
+-- v10: matching strangers to similar users, and the stranger leaderboard. Safe to re-run.
+-- Users are grouped only by region, texting style and interests (never gender, ethnicity or looks).
+-- =====================================================================
+alter table public.stranger_contacts
+  add column if not exists segment text,   -- e.g. 'kenya.brief.sport' at the time of the contact
+  add column if not exists region  text;   -- 'kenya' | 'africa' | 'world'
+
+-- How each stranger does, per user group. Counts only (no user ids); used for matching and the leaderboard.
+-- reward per contact: 0.4 x answered + 0.3 x reached 10+ user messages + 0.3 x came back on a later day within a week
+-- (blocked = 0). Contacts under 48 hours old only count once answered.
+create or replace function public.stranger_performance()
+returns table (
+  persona_id uuid, segment text, region text,
+  users bigint, contacts bigint, decided bigint, reward numeric,
+  answered bigint, reached10 bigint, returned bigint, blocked bigint, thumbs_up bigint, thumbs_down bigint
+)
+language sql stable security definer set search_path = public as $$
+  with c as (
+    select sc.*,
+      (select count(*) from public.messages m where m.conversation_id = sc.conversation_id and m.role = 'user') as user_msgs,
+      exists (
+        select 1 from public.messages m where m.conversation_id = sc.conversation_id and m.role = 'user'
+          and m.created_at between sc.created_at + interval '20 hours' and sc.created_at + interval '7 days'
+      ) as came_back,
+      (select count(*) from public.feedback f where f.conversation_id = sc.conversation_id and f.rating = 1) as ups,
+      (select count(*) from public.feedback f where f.conversation_id = sc.conversation_id and f.rating = -1) as downs
+    from public.stranger_contacts sc
+  ),
+  scored as (
+    select c.*,
+      (c.state = 'accepted' or c.user_msgs > 0) and c.state <> 'blocked' as did_answer,
+      (c.state = 'accepted' or c.user_msgs > 0 or c.created_at < now() - interval '48 hours') as is_decided
+    from c
+  )
+  select s.persona_id, coalesce(s.segment, 'unknown'), coalesce(s.region, 'unknown'),
+         count(distinct s.user_id), count(*), count(*) filter (where s.is_decided),
+         coalesce(sum(case when not s.is_decided or s.state = 'blocked' then 0 else
+           0.4 * s.did_answer::int + 0.3 * (s.user_msgs >= 10)::int + 0.3 * s.came_back::int end), 0)::numeric,
+         count(*) filter (where s.did_answer), count(*) filter (where s.user_msgs >= 10),
+         count(*) filter (where s.came_back), count(*) filter (where s.state = 'blocked'),
+         coalesce(sum(s.ups), 0)::bigint, coalesce(sum(s.downs), 0)::bigint
+  from scored s
+  group by s.persona_id, coalesce(s.segment, 'unknown'), coalesce(s.region, 'unknown');
+$$;
+revoke all on function public.stranger_performance() from public, anon;
+grant execute on function public.stranger_performance() to authenticated;
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

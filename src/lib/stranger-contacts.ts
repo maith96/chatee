@@ -7,7 +7,7 @@ import { splitBubbles } from "./bubbles";
 import { createConversation, insertMessages, systemPromptFor, type Conversation, type Message } from "./chat-service";
 import { isMissingSchema } from "./db-errors";
 import { loadNews } from "./news";
-import { regionFromTimezone } from "./news-sources";
+import { chooseStranger, loadPerformance, userSegment, type Candidate, type RecentContact } from "./stranger-matching";
 import { getPersona, summarize, type Persona } from "./personas";
 import { partOfDay } from "./prompt-builder";
 import { resolveModel } from "./providers";
@@ -80,9 +80,14 @@ export function dmBlockedReason(
   return null;
 }
 
-/** Picks a stranger the user hasn't met: mostly from their own region, with trial strangers mixed in. */
-export async function pickStranger(db: SupabaseClient, opts: { exclude: Set<string>; timezone?: string; rand?: () => number }) {
-  const rand = opts.rand ?? Math.random;
+/**
+ * Picks a stranger the user hasn't met (see stranger-matching.ts): mostly the ones that do best with
+ * similar users, sometimes ones with little data yet, keeping each user's strangers varied.
+ */
+export async function pickStranger(
+  db: SupabaseClient,
+  opts: { exclude: Set<string>; recentIds: string[]; timezone?: string; rand?: () => number },
+) {
   const { data, error } = await db
     .from("personas")
     .select("id, status, tags")
@@ -90,16 +95,16 @@ export async function pickStranger(db: SupabaseClient, opts: { exclude: Set<stri
     .in("status", ["trial", "active"])
     .limit(500);
   if (error) throw error;
-  const pool = (data ?? []).filter((p) => !opts.exclude.has(p.id as string)) as { id: string; status: string; tags: { region?: string } }[];
-  if (!pool.length) return null;
-  const home = regionFromTimezone(opts.timezone);
-  const homeGroup = home === "kenya" ? "kenya" : home === "africa" ? "africa" : home ? "world" : null;
-  // 60% from the user's region group when possible; trial strangers get a fair share so they collect data.
-  const local = homeGroup ? pool.filter((p) => p.tags?.region === homeGroup) : [];
-  const fromPool = local.length && rand() < 0.6 ? local : pool;
-  const trial = fromPool.filter((p) => p.status === "trial");
-  const chosenFrom = trial.length && rand() < 0.3 ? trial : fromPool;
-  return chosenFrom[Math.floor(rand() * chosenFrom.length)].id;
+  const all = (data ?? []) as Candidate[];
+  const candidates = all.filter((p) => !opts.exclude.has(p.id));
+  if (!candidates.length) return null;
+  const [{ segment, region }, rows] = await Promise.all([userSegment(db, opts.timezone), loadPerformance(db)]);
+  // The user's latest strangers (newest first), for the diversity limits.
+  const recentIds = opts.recentIds.slice(0, 3);
+  const { data: recentData } = recentIds.length ? await db.from("personas").select("id, tags").in("id", recentIds) : { data: [] };
+  const recent = recentIds.map((id) => ((recentData ?? []).find((p) => p.id === id)?.tags ?? {}) as RecentContact);
+  const choice = chooseStranger(candidates, { rows: rows ?? [], segment, region, recent, rand: opts.rand });
+  return choice ? { id: choice.id, segment, region, mode: choice.mode } : null;
 }
 
 export const OPENER_TASK = (persona: Persona, ideas: string[], part: string) => `You're texting this person for the very first time. You're strangers who just matched on the app, and they haven't said anything yet.
@@ -130,21 +135,29 @@ async function writeOpener(db: SupabaseClient, persona: Persona, conversation: C
 }
 
 /** Creates the chat with a stranger, their first message, and the contact row. */
-async function startWithStranger(db: SupabaseClient, personaId: string, origin: "dm" | "meet", timezone?: string) {
-  const persona = await getPersona(db, personaId);
+async function startWithStranger(
+  db: SupabaseClient,
+  pick: { id: string; segment: string; region: string },
+  origin: "dm" | "meet",
+  timezone?: string,
+) {
+  const persona = await getPersona(db, pick.id);
   if (!persona) return null;
   const conversation = await createConversation(db, { persona, title: persona.name, model: persona.definition.settings.model as never });
   const messages = await writeOpener(db, persona, conversation, timezone).catch(async (err) => {
     await db.from("conversations").delete().eq("id", conversation.id); // don't leave an empty chat behind
     throw err;
   });
-  const { error } = await db.from("stranger_contacts").insert({
+  const row = {
     persona_id: persona.id,
     conversation_id: conversation.id,
     origin,
     state: origin === "meet" ? "accepted" : "request",
     responded_at: origin === "meet" ? new Date().toISOString() : null,
-  });
+  };
+  // The user's group at the time, so performance can be measured per group (schema v10).
+  let { error } = await db.from("stranger_contacts").insert({ ...row, segment: pick.segment, region: pick.region });
+  if (error && isMissingSchema(error)) ({ error } = await db.from("stranger_contacts").insert(row));
   if (error) throw error;
   return { persona, conversation, messages };
 }
@@ -189,9 +202,9 @@ export async function deliverIfDue(db: SupabaseClient, user: { id: string; creat
   if (!rows) return { delivered: null, reason: "not set up" };
   const reason = dmBlockedReason(rows, { enabled: await strangersEnabled(db), userCreatedAt: user.created_at, timezone });
   if (reason) return { delivered: null, reason };
-  const personaId = await pickStranger(db, { exclude: new Set(rows.map((r) => r.persona_id)), timezone });
-  if (!personaId) return { delivered: null, reason: "no strangers available" };
-  const started = await startWithStranger(db, personaId, "dm", timezone);
+  const pick = await pickStranger(db, { exclude: new Set(rows.map((r) => r.persona_id)), recentIds: rows.map((r) => r.persona_id), timezone });
+  if (!pick) return { delivered: null, reason: "no strangers available" };
+  const started = await startWithStranger(db, pick, "dm", timezone);
   return { delivered: started ? started.persona.id : null, reason: started ? null : "stranger not found" };
 }
 
@@ -200,9 +213,9 @@ export async function meetSomeone(db: SupabaseClient, timezone?: string) {
   const rows = (await listContactRows(db)) ?? [];
   const today = rows.filter((r) => r.origin === "meet" && Date.now() - Date.parse(r.created_at) < 24 * 3_600_000).length;
   if (today >= MEET_PER_DAY) return { error: "limit" as const };
-  const personaId = await pickStranger(db, { exclude: new Set(rows.map((r) => r.persona_id)), timezone });
-  if (!personaId) return { error: "none" as const };
-  const started = await startWithStranger(db, personaId, "meet", timezone);
+  const pick = await pickStranger(db, { exclude: new Set(rows.map((r) => r.persona_id)), recentIds: rows.map((r) => r.persona_id), timezone });
+  if (!pick) return { error: "none" as const };
+  const started = await startWithStranger(db, pick, "meet", timezone);
   return started ? { conversation: started.conversation, persona: started.persona } : { error: "none" as const };
 }
 
