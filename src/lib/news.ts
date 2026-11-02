@@ -4,7 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingSchema } from "./db-errors";
 import type { DigestItem } from "./news-digest";
-import { isRegion, isTopic, regionFromTimezone, REGIONS, TOPICS, type Region, type Topic } from "./news-sources";
+import { isRegion, isTopic, PARENT_REGION, regionFromTimezone, REGIONS, TOPICS, type Region, type Topic } from "./news-sources";
 import type { PersonaDefinition } from "./persona-schema";
 import { countWords } from "./reply-stats";
 
@@ -104,12 +104,14 @@ export function rankNews(
     .filter((i) => !opts.alreadyMentioned.has(i.id))
     .map((i) => {
       let score = 1;
+      const parent = PARENT_REGION[i.region];
       if (opts.prefs.regions.length) {
-        if (opts.prefs.regions.includes(i.region)) score += 2;
+        if (opts.prefs.regions.includes(i.region) || (parent && opts.prefs.regions.includes(parent))) score += 2;
         else if (i.region === "global") score += 0.5;
         else return null;
       } else {
         if (i.region === opts.homeRegion) score += 1.5;
+        else if (opts.homeRegion && PARENT_REGION[opts.homeRegion] === i.region) score += 1; // e.g. Africa for a Kenyan user
         else if (i.region === "global") score += 1;
         score += opts.weights.regions[i.region].rate * 3;
       }

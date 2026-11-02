@@ -1,11 +1,12 @@
 // News feeds, regions and topics. Shared with the browser (settings UI), so no server-only imports.
 
-export const REGIONS = ["global", "africa", "asia", "europe", "uk", "north_america", "latin_america", "middle_east", "oceania"] as const;
+export const REGIONS = ["global", "africa", "kenya", "asia", "europe", "uk", "north_america", "latin_america", "middle_east", "oceania"] as const;
 export type Region = (typeof REGIONS)[number];
 
 export const REGION_LABELS: Record<Region, string> = {
   global: "World",
   africa: "Africa",
+  kenya: "Kenya",
   asia: "Asia",
   europe: "Europe",
   uk: "UK",
@@ -14,6 +15,9 @@ export const REGION_LABELS: Record<Region, string> = {
   middle_east: "Middle East",
   oceania: "Australia & Pacific",
 };
+
+/** Country-level regions sit inside a wider one: a Kenyan user also gets African stories, and choosing Africa includes Kenya. */
+export const PARENT_REGION: Partial<Record<Region, Region>> = { kenya: "africa" };
 
 export const TOPICS = ["world", "politics", "business", "tech", "science", "health", "sport", "entertainment", "culture", "climate", "other"] as const;
 export type Topic = (typeof TOPICS)[number];
@@ -40,6 +44,13 @@ export const FEEDS: { url: string; source: string; region: Region; topic: Topic 
   { url: "https://feeds.npr.org/1001/rss.xml", source: "NPR", region: "north_america", topic: "world" },
   { url: "https://feeds.bbci.co.uk/news/world/africa/rss.xml", source: "BBC", region: "africa", topic: "world" },
   { url: "https://www.africanews.com/feed/rss", source: "Africanews", region: "africa", topic: "world" },
+  // Kenya
+  { url: "https://nation.africa/kenya/rss.xml", source: "Nation", region: "kenya", topic: "world" },
+  { url: "https://www.standardmedia.co.ke/rss/headlines.php", source: "The Standard", region: "kenya", topic: "world" },
+  { url: "https://www.capitalfm.co.ke/news/feed/", source: "Capital FM", region: "kenya", topic: "world" },
+  { url: "https://www.capitalfm.co.ke/business/feed/", source: "Capital FM", region: "kenya", topic: "business" },
+  { url: "https://www.capitalfm.co.ke/sports/feed/", source: "Capital FM", region: "kenya", topic: "sport" },
+  { url: "https://www.kenyans.co.ke/feeds/news", source: "Kenyans.co.ke", region: "kenya", topic: "world" },
   { url: "https://feeds.bbci.co.uk/news/world/asia/rss.xml", source: "BBC", region: "asia", topic: "world" },
   { url: "https://feeds.bbci.co.uk/news/world/europe/rss.xml", source: "BBC", region: "europe", topic: "world" },
   { url: "https://feeds.bbci.co.uk/news/uk/rss.xml", source: "BBC", region: "uk", topic: "world" },
@@ -64,6 +75,7 @@ export function regionFromTimezone(tz: string | undefined | null): Region | null
   if (tz === "Europe/London" || tz === "Europe/Belfast") return "uk";
   if (MIDDLE_EAST.test(tz)) return "middle_east";
   if (LATIN_AMERICA.test(tz)) return "latin_america";
+  if (tz === "Africa/Nairobi") return "kenya";
   if (tz.startsWith("Africa/")) return "africa";
   if (tz.startsWith("Europe/")) return "europe";
   if (tz.startsWith("America/") || tz.startsWith("US/") || tz.startsWith("Canada/")) return "north_america";

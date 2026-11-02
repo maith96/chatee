@@ -6,12 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import { z } from "zod";
 import { isGrounded } from "./memory";
-import { FEEDS, isRegion, isTopic, type Region, type Topic } from "./news-sources";
+import { FEEDS, isRegion, isTopic, PARENT_REGION, type Region, type Topic } from "./news-sources";
 import { resolveModel } from "./providers";
 
 const MAX_AGE_HOURS = 36;
 const PER_FEED = 8;
-const MAX_ITEMS = 45;
+const MAX_ITEMS = 55;
 export const REFRESH_EVERY_HOURS = 4;
 
 export type RawItem = { id: string; title: string; description: string; url: string | null; publishedAt: string | null; source: string; region: Region; topic: Topic };
@@ -57,7 +57,8 @@ export function parseRss(xml: string, feed: (typeof FEEDS)[number], now = Date.n
     .map((x) => {
       const title = tag(x, "title");
       const url = tag(x, "link") || null;
-      const date = tag(x, "pubDate") || tag(x, "dc:date");
+      // Some feeds write offsets as +0300; Date.parse wants +03:00.
+      const date = (tag(x, "pubDate") || tag(x, "dc:date")).replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
       const time = date ? Date.parse(date) : NaN;
       return {
         id: createHash("sha1").update(url ?? title).digest("hex").slice(0, 16),
@@ -99,35 +100,54 @@ export async function fetchFeeds(): Promise<RawItem[]> {
 
 // ---------- condense + tag ----------------------------------------------------------------------
 
-const tagged = z.array(
-  z.object({
-    n: z.number().int(),
-    summary: z.string().min(5).max(400),
-    topic: z.string(),
-    region: z.string(),
-    sensitive: z.boolean().optional(),
-    political: z.boolean().optional(),
-  }),
-);
+const taggedItem = z.object({
+  n: z.coerce.number().int(),
+  summary: z.string().min(5).transform((x) => x.slice(0, 400)),
+  topic: z.string(),
+  region: z.string(),
+  sensitive: z.boolean().optional(),
+  political: z.boolean().optional(),
+});
+/** Each item is checked on its own, so one malformed item doesn't throw away the whole batch. */
+function parseTagged(text: string) {
+  const list: unknown = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
+  if (!Array.isArray(list)) throw new Error("digest model didn't return a list");
+  return list.flatMap((x) => {
+    const r = taggedItem.safeParse(x);
+    return r.success ? [r.data] : [];
+  });
+}
 
-const DIGEST_PROMPT = (list: string) => `You prepare a short news digest that AI chat characters can use in casual conversation.
+const DIGEST_PROMPT = (list: string, want: number) => `You prepare a short news digest that AI chat characters can use in casual conversation.
 
 Headlines (number, source, feed region/topic, title — description):
 ${list}
 
-Pick up to ${MAX_ITEMS} of the most notable, varied stories: cover every region that has stories (at least 2 each where available) and a mix of topics (not only politics and conflict; include tech, science, sport, entertainment, culture).
+Pick about ${want} of the most notable, varied stories: cover every region that has stories (at least 3 each where available, and at least 8 for kenya) and a mix of topics (not only politics and conflict; include tech, science, sport, entertainment, culture).
 Merge duplicates (pick one). For each, write a neutral one-sentence summary using ONLY facts stated in its title/description. No opinions, no added details, numbers or names that aren't there.
 Tag each with:
 - topic: one of world, politics, business, tech, science, health, sport, entertainment, culture, climate, other
-- region: one of global, africa, asia, europe, uk, north_america, latin_america, middle_east, oceania (where it mainly happens; "global" if worldwide)
+- region: one of global, africa, kenya, asia, europe, uk, north_america, latin_america, middle_east, oceania (where it mainly happens; "kenya" for Kenyan stories, "africa" for the rest of Africa; "global" if worldwide)
 - sensitive: true for deaths, disasters, violence, war, abuse or other tragedies
 - political: true for elections, governments, parties, policy disputes
 
 Reply with ONLY a JSON array: [{"n": 3, "summary": "...", "topic": "tech", "region": "global", "sensitive": false, "political": false}]`;
 
-/** Condenses raw items with a model. Falls back to the raw headlines if the model fails. */
-export async function condense(items: RawItem[]): Promise<DigestItem[]> {
-  const toDigest = (i: RawItem, extra?: Partial<DigestItem>): DigestItem => ({
+const BATCH = 50;
+
+/** Round-robin across feeds, so every region and topic is represented (used when the model fails). */
+function spread(items: RawItem[], max: number) {
+  const byFeed = new Map<string, RawItem[]>();
+  for (const i of items) byFeed.set(`${i.source}:${i.region}:${i.topic}`, [...(byFeed.get(`${i.source}:${i.region}:${i.topic}`) ?? []), i]);
+  const queues = [...byFeed.values()];
+  const out: RawItem[] = [];
+  for (let round = 0; out.length < max && queues.some((q) => q.length > round); round++)
+    for (const q of queues) if (q[round] && out.length < max) out.push(q[round]);
+  return out;
+}
+
+function toDigest(i: RawItem, extra?: Partial<DigestItem>): DigestItem {
+  return {
     id: i.id,
     title: i.title,
     summary: i.description || i.title,
@@ -139,12 +159,16 @@ export async function condense(items: RawItem[]): Promise<DigestItem[]> {
     url: i.url,
     published_at: i.publishedAt,
     ...extra,
-  });
+  };
+}
+
+/** One model call for a batch of headlines; picks about `want` of them. */
+async function condenseBatch(items: RawItem[], want: number): Promise<DigestItem[]> {
   try {
     const list = items.map((i, n) => `[${n}] (${i.source}, ${i.region}/${i.topic}) ${i.title} — ${i.description}`).join("\n");
     const { languageModel, providerOptions } = resolveModel(process.env.NEWS_DIGEST_MODEL === "nova-smart" ? "nova-smart" : "nova-fast");
-    const { text } = await generateText({ model: languageModel, providerOptions, maxOutputTokens: 6000, prompt: DIGEST_PROMPT(list) });
-    const parsed = tagged.parse(JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1)));
+    const { text } = await generateText({ model: languageModel, providerOptions, maxOutputTokens: 4000, prompt: DIGEST_PROMPT(list, want) });
+    const parsed = parseTagged(text);
     const out: DigestItem[] = [];
     const used = new Set<number>();
     for (const p of parsed) {
@@ -152,31 +176,40 @@ export async function condense(items: RawItem[]): Promise<DigestItem[]> {
       if (!raw || used.has(p.n)) continue;
       used.add(p.n);
       // Keep the model's summary only if it's grounded in the source text; otherwise use the source's own words.
-      const source = `${raw.title} ${raw.description}`;
-      const summary = isGrounded(p.summary, source) ? p.summary.trim() : raw.description || raw.title;
-      out.push(
-        toDigest(raw, {
-          summary,
-          topic: isTopic(p.topic) ? p.topic : raw.topic,
-          region: isRegion(p.region) ? p.region : raw.region,
-          sensitive: Boolean(p.sensitive),
-          political: Boolean(p.political),
-        }),
-      );
+      const summary = isGrounded(p.summary, `${raw.title} ${raw.description}`) ? p.summary.trim() : raw.description || raw.title;
+      // The feed knows its region best (a BBC Africa story is African). The model's tag is used for worldwide
+      // feeds, to narrow a region down (an Africa story that's really about Kenya), and for world news that a
+      // country's outlets report (an F1 race in Mexico on a Kenyan site isn't Kenyan news).
+      const tagged = isRegion(p.region) ? p.region : null;
+      const parentOfFeed = PARENT_REGION[raw.region];
+      const region =
+        raw.region === "global"
+          ? (tagged ?? "global")
+          : tagged && PARENT_REGION[tagged] === raw.region
+            ? tagged
+            : parentOfFeed && tagged && tagged !== parentOfFeed && tagged !== raw.region
+              ? tagged
+              : raw.region;
+      // Same for topics: a sport feed's story is sport; general feeds get the model's topic.
+      const topic = raw.topic !== "world" ? raw.topic : isTopic(p.topic) ? p.topic : raw.topic;
+      out.push(toDigest(raw, { summary, topic, region, sensitive: Boolean(p.sensitive), political: Boolean(p.political) }));
     }
-    if (out.length >= 5) return out.slice(0, MAX_ITEMS);
+    if (out.length >= Math.min(3, want)) return out.slice(0, want);
     throw new Error(`digest model returned only ${out.length} usable items`);
   } catch (err) {
-    console.error("News digest model failed; using raw headlines", err);
-    // Spread across feeds: take items round-robin so every region and topic is represented.
-    const byFeed = new Map<string, RawItem[]>();
-    for (const i of items) byFeed.set(`${i.source}:${i.region}:${i.topic}`, [...(byFeed.get(`${i.source}:${i.region}:${i.topic}`) ?? []), i]);
-    const queues = [...byFeed.values()];
-    const out: RawItem[] = [];
-    for (let round = 0; out.length < MAX_ITEMS && queues.some((q) => q.length > round); round++)
-      for (const q of queues) if (q[round] && out.length < MAX_ITEMS) out.push(q[round]);
-    return out.map((i) => toDigest(i));
+    console.error("News digest batch failed; using raw headlines for it:", (err as Error).message);
+    return spread(items, want).map((i) => toDigest(i));
   }
+}
+
+/** Condenses raw items in parallel batches (faster, and more reliable tagging than one huge call). */
+export async function condense(items: RawItem[]): Promise<DigestItem[]> {
+  const batches: RawItem[][] = [];
+  for (let i = 0; i < items.length; i += BATCH) batches.push(items.slice(i, i + BATCH));
+  const results = await Promise.all(
+    batches.map((b) => condenseBatch(b, Math.max(3, Math.round((MAX_ITEMS * b.length) / Math.max(1, items.length))))),
+  );
+  return results.flat().slice(0, MAX_ITEMS);
 }
 
 // ---------- refresh -----------------------------------------------------------------------------

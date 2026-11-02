@@ -98,7 +98,7 @@ per session; check-ins are shown separately.
   `insert into public.admins (user_id) select id from auth.users where email = 'you@example.com';`
 - Bump `PROMPT_VERSION` in `src/lib/prompt-builder.ts` when you change the prompt layers.
 
-**Today's news:** a shared digest (`news_items`) built from free RSS feeds (`src/lib/news-sources.ts`): a fast model
+**Today's news:** a shared digest (`news_items`) built from free RSS feeds (`src/lib/news-sources.ts`: world, 9 regions, and Kenya: Nation, The Standard, Capital FM, Kenyans.co.ke): a fast model
 condenses about 100 headlines into about 45 neutral, tagged stories (topic, region, serious, political). It refreshes in the
 background after a chat once it's 4+ hours old (or with **Refresh now** on `/admin/stats`). Each reply gets the 4 stories that
 best fit the persona's interests and the user (home region from their timezone, plus what they've engaged with). Personas
