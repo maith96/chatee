@@ -8,6 +8,7 @@ import { getPersona, type Persona } from "./personas";
 import { bumpRelationship, extractMemories, getRelationship, listMemories, stageFor, type Memory, type Relationship } from "./memory";
 import { buildPersonaPrompt, detectCrisis, detectMinor } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
+import { isMissingSchema } from "./db-errors";
 import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 export const SYSTEM_PROMPT =
@@ -40,6 +41,15 @@ export type Message = {
 
 const CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at";
 const MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, reply_id, created_at";
+// Until schema v4 is run in Supabase: work without the stats columns instead of failing.
+const LEGACY_MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, created_at";
+const STATS_COLUMNS = ["reply_id", "prompt_version", "variant", "words", "emoji", "has_question", "bubble_index", "bubble_count", "latency_ms", "crisis"];
+
+let warnedLegacy = false;
+function warnLegacy() {
+  if (!warnedLegacy) console.warn("Stats columns missing: run supabase/schema.sql (v4) in Supabase to enable stats.");
+  warnedLegacy = true;
+}
 export const DEFAULT_TITLE = "New conversation";
 
 // ---- Conversations -------------------------------------------------------
@@ -97,13 +107,15 @@ export async function deleteConversation(db: SupabaseClient, id: string) {
 // ---- Messages ------------------------------------------------------------
 
 export async function listMessages(db: SupabaseClient, conversationId: string) {
-  const { data, error } = await db
-    .from("messages")
-    .select(MESSAGE_FIELDS)
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+  const query = (fields: string) =>
+    db.from("messages").select(fields).eq("conversation_id", conversationId).order("created_at", { ascending: true });
+  let { data, error } = await query(MESSAGE_FIELDS);
+  if (error && isMissingSchema(error)) {
+    warnLegacy();
+    ({ data, error } = await query(LEGACY_MESSAGE_FIELDS));
+  }
   if (error) throw error;
-  return data as Message[];
+  return data as unknown as Message[];
 }
 
 type NewMessage = {
@@ -129,9 +141,14 @@ type NewMessage = {
 export async function insertMessages(db: SupabaseClient, rows: NewMessage[]) {
   const start = Date.now();
   const stamped = rows.map((r, i) => ({ ...r, created_at: new Date(start + i).toISOString() }));
-  const { data, error } = await db.from("messages").insert(stamped).select(MESSAGE_FIELDS);
+  let { data, error } = await db.from("messages").insert(stamped).select(MESSAGE_FIELDS);
+  if (error && isMissingSchema(error)) {
+    warnLegacy();
+    const legacy = stamped.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !STATS_COLUMNS.includes(k))));
+    ({ data, error } = await db.from("messages").insert(legacy).select(LEGACY_MESSAGE_FIELDS));
+  }
   if (error) throw error;
-  return (data as Message[]).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return (data as unknown as Message[]).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
 /** History for the model: consecutive assistant bubbles become one turn, in the bubble format. */

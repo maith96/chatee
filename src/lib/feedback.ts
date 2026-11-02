@@ -1,5 +1,6 @@
 // Thumbs up/down on persona replies, and the admin-only stats built from them.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingSchema } from "./db-errors";
 
 export const FEEDBACK_REASONS = ["too_long", "too_short", "out_of_character", "repetitive", "too_much", "other"] as const;
 export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
@@ -19,6 +20,7 @@ export const isReason = (x: unknown): x is FeedbackReason => FEEDBACK_REASONS.in
 
 export async function listFeedback(db: SupabaseClient, conversationId: string) {
   const { data, error } = await db.from("feedback").select("reply_id, rating, reason").eq("conversation_id", conversationId);
+  if (error && isMissingSchema(error)) return []; // schema v4 not run yet
   if (error) throw error;
   return data as Feedback[];
 }
