@@ -109,7 +109,7 @@ function copiedFromExamples(text: string, def: PersonaDefinition) {
 
 // Texting, not meeting: stage directions, serving the user, and other-language slips.
 const STAGE_DIRECTION = /\*[a-z][^*\n]{2,60}\*/i;
-const IN_PERSON = /\b(what can i get (you|ya)|what brings you in|here you go|coming (right )?up|takeaway cup|pull up a (chair|stool)|have a seat|pours? you|hands? you)\b/i;
+const IN_PERSON = /\b(what can i get (you|ya)|what brings you (in|here|to (the|my|our) (shop|caf[ée]|store|bookshop|place))|welcome (in|to the (shop|caf[ée]))|here you go|coming (right )?up|takeaway cup|pull up a (chair|stool)|have a seat|pours? you|hands? you)\b/i;
 const OTHER_SCRIPT = /[\u0400-\u04FF\u0590-\u06FF\u0900-\u0DFF\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/;
 const TECH_EXCUSE = /\b(data|sensors?|algorithm|database|camera|feed|training)\b/i;
 
