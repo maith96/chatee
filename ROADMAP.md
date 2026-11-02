@@ -15,9 +15,10 @@ Ideas and decisions so far, so nothing gets lost. ✅ = shipped, 🔜 = next, �
 - ✅ **Evals:** `npm run eval` plays scripted scenarios against the real models, with automatic checks and a judge model.
 - ✅ **Learning from interaction** (analytics step 1): reply style metadata, 👍/👎 with reasons, `/admin/stats` (aggregates only, no message text, 5-user minimum, crisis excluded). Main measures are thumbs-up and day-7 return, not message volume.
 - ✅ **Style experiments** (analytics step 2): A/B variants per new chat (`src/lib/experiments.ts`), results with 95% ranges. Running: `bubbles-v1` (usual bubbles vs one bubble).
+- ✅ **Today's news** in conversations: shared digest from free RSS feeds, learned per-user regions and topics, user settings.
 - ✅ **Per-user style** (analytics step 3): personas tune *how* they text to each user from 👎 reasons and how the user texts. Fixed list of style-only adjustments, visible in the Memory panel, resettable, can be switched off.
 
-## 🔜 Next: today's news in conversations
+## ✅ Shipped: today's news in conversations (see README). Original plan below
 
 Personas only know the world up to the model's training date. Give them fresh news to bring up naturally.
 
@@ -32,7 +33,7 @@ Personas only know the world up to the model's training date. Give them fresh ne
   - Track whether the user engages when a persona mentions an item (replies about it, writes more, keeps the topic going) and build per-user topic/region weights from that. Metadata only, resettable.
   - A setting lets the user choose regions/topics explicitly; it overrides the learning.
 
-## 🔜 Then: Strangers (AI people who message you first)
+## 🔜 Next: Strangers (AI people who message you first)
 
 A WhatsApp-like experience where AI "strangers" DM the user to get to know them or just talk, and the user can also start a chat with a random new one.
 

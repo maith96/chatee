@@ -2,7 +2,8 @@ import { assertUuid, authenticate, errors, json, preflight, readJson, route } fr
 import { getConversation } from "@/lib/chat-service";
 import { maybeCheckIn } from "@/lib/checkin";
 
-export const maxDuration = 60;
+// Room for after-reply work (memories, and sometimes refreshing the shared news digest).
+export const maxDuration = 300;
 
 // POST /api/v1/conversations/{id}/checkin  { "timezone"?: "Europe/London" }
 // Call when the user opens a persona chat. If they've been away long enough, the persona texts

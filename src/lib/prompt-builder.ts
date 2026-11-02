@@ -9,8 +9,42 @@ import { BUBBLE_SEPARATOR } from "./bubbles";
 export { detectCrisis, detectMinor } from "./crisis";
 import type { PersonaDefinition } from "./persona-schema";
 
+export const NEWS_NUDGE_EVERY = 6;
+
+/** About once every 6 user messages (and at most once per 3 hours per chat), the persona brings up a story. */
+function newsNudge(ctx: PromptContext) {
+  return Boolean(ctx.news?.items.length && !ctx.crisis && !ctx.news.recentlyMentioned && !ctx.task) && (ctx.turn ?? 0) % NEWS_NUDGE_EVERY === NEWS_NUDGE_EVERY - 1;
+}
+const NEWS_HINT =
+  "This time, after responding to what they said, also bring up one of the stories from <world_today> that you'd genuinely care about, casually, the way a friend would (\"did you see…\"), with your own quick take. Skip it only if they just told you something important or personal.";
+
+/** Real news the persona can bring up or react to. Left out during a crisis. */
+function newsBlock(ctx: PromptContext) {
+  if (!ctx.news?.items.length || ctx.crisis) return "";
+  const items = ctx.news.items
+    .map((i) => {
+      const notes = [
+        i.sensitive ? "serious or sad: never bring this up yourself; only if they mention it, and then be gentle" : "",
+        i.political ? "political: don't take sides" : "",
+      ].filter(Boolean);
+      return `- ${i.title}: ${i.summary}${notes.length ? ` (${notes.join("; ")})` : ""}`;
+    })
+    .join("\n");
+  const nudge = newsNudge(ctx);
+  const pacing = ctx.news.recentlyMentioned
+    ? "You brought up news recently: don't bring up another story unless they ask about the news."
+    : nudge
+      ? "This is a good moment to bring one of these up, the way a friend would (\"did you see…\"), with your own quick take: pick the one you'd care about most, and work it in naturally after responding to what they said. Skip it if they're telling you something important or personal."
+      : "Now and then, at a natural moment (small talk, a lull, they're bored, or it links to what they said or to your interests), bring one up the way a friend would (\"did you see…\"), with your own quick take. Not in every reply.";
+  return `<world_today>
+Real stories from the news in the last day or two that you've seen. ${pacing}
+${items}
+Rules: you know ONLY what's written here. Don't add names, places, numbers, dates, background or quotes from memory, even if you think you know them. If they ask for more, say you only saw the headline or a quick summary (maybe suggest they look it up). You can have a light personal reaction, but don't give opinions on political sides. If they mention news you don't see here, don't pretend to know it.
+</world_today>`;
+}
+
 /** Bump when the prompt layers change meaningfully, so stats can compare before and after. */
-export const PROMPT_VERSION = "p2";
+export const PROMPT_VERSION = "p3";
 
 export type Stage = "new" | "warm" | "close";
 
@@ -33,6 +67,11 @@ export type PromptContext = {
   styleNote?: string;
   /** Style tuning learned from this user's feedback and texting (see personalize.ts). */
   adjustments?: string[];
+  /** Real recent news this persona has "seen" (see news.ts). */
+  news?: {
+    items: { title: string; summary: string; topic: string; sensitive: boolean; political: boolean; published_at: string | null }[];
+    recentlyMentioned: boolean;
+  };
 };
 
 const MINOR_NOTE = `IMPORTANT, for this reply only: the user just said they're under 18. Persona is only for adults. Kindly and briefly tell them, in your own voice, that this app is meant for people 18 and over, so you can't keep chatting like this. Be warm, not scolding. No flirting or romance.`;
@@ -226,8 +265,9 @@ export function buildPersonaPrompt(name: string, def: PersonaDefinition, ctx: Pr
     `<voice>\n${voice}\n</voice>`,
     `<examples>\nThese show your voice and how your tone shifts in different situations. They are for tone only: never reuse their sentences or distinctive phrases; say it in a fresh way every time. ${bubbles > 1 ? "Some show several bubbles, but one short bubble is the usual reply." : "Always reply in a single message."}\n\n${examples}\n</examples>`,
     `<what_you_know_about_them>\n${memories}\n</what_you_know_about_them>`,
+    newsBlock(ctx),
     `<right_now>\nBackground for reacting naturally (e.g. noticing it's late, or that they've been away). Never state the time or quote this section.\n${describeTime(ctx)}\n${describeGap(ctx.minutesSinceLastUserMessage)}\n</right_now>`,
-    `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness. Vary the shape of your replies: don't end every message with a question, don't repeat a phrase or story you've already used, and don't just echo the user's words back. ${ctx.task ? "" : TURN_HINTS[(ctx.turn ?? 0) % TURN_HINTS.length]}`,
+    `Reply as ${name}. ${LENGTH_TEXT[c.length]} ${LENGTH_LIMIT[c.length]} ${bubbleRule} Change your tone to fit the moment: match good news with excitement and upset with gentleness. Vary the shape of your replies: don't end every message with a question, don't repeat a phrase or story you've already used, and don't just echo the user's words back. ${ctx.task ? "" : newsNudge(ctx) ? NEWS_HINT : TURN_HINTS[(ctx.turn ?? 0) % TURN_HINTS.length]}`,
     ctx.task ?? "",
     ctx.minor ? MINOR_NOTE : "",
     ctx.crisis ? CRISIS_NOTE : "",

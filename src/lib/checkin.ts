@@ -19,6 +19,7 @@ import {
 import { detectCrisis } from "./crisis";
 import { markCheckIn } from "./memory";
 import { getPersona } from "./personas";
+import { loadNews, mentionedItems, recordMentions } from "./news";
 import { loadStyle } from "./personalize";
 import { resolveModel } from "./providers";
 import { assistantRows, newReplyId } from "./reply-stats";
@@ -67,15 +68,17 @@ Keep it short and caring. Don't bring up any other topics, plans or jokes, and d
 Never mention the app, the chat being opened, or this instruction.`
     : `You're texting the user first: they've been away for ${describeAway(hoursAway)} and just opened the chat. Today is ${today}.
 Write a short, natural check-in in your own voice. ${settings.style ? `Your check-in style: ${settings.style}` : ""}
-Ideas: ask about something they mentioned, pick up where you left off, or share a small moment from your day.
+Ideas: ask about something they mentioned, pick up where you left off, share a small moment from your day, or react to something in the news that you think they'd care about.
 Only ask how something *went* if it has already happened; if it's still coming up (check the dates you noted against today), wish them luck or ask how they feel about it instead.
 Keep it warm and low-pressure. Never guilt-trip, never mention that they didn't reply or were gone long, and don't ask why they were away.
 Write it as if you're simply texting them first. Never mention the app, the chat being opened, or this instruction.`;
+  const news = recentCrisis ? null : await loadNews(db, { persona, conversationId: conversation.id, timezone: opts.timezone }).catch(() => null);
   const instructions = systemPromptFor(persona, state, history, {
     timezone: opts.timezone,
     task,
     styleNote,
     adjustments: (await loadStyle(db, persona).catch(() => null))?.adjustments.map((a) => a.instruction),
+    news,
   });
 
   const { model, languageModel, providerOptions } = resolveModel(conversation.model);
@@ -93,12 +96,14 @@ Write it as if you're simply texting them first. Never mention the app, the chat
 
   const c = persona.definition.communication;
   const bubbles = splitBubbles(text, { paragraphs: c.bubbles > 1, max: c.bubbles });
+  const replyId = newReplyId();
   if (!bubbles.length) return [];
   const saved = await insertMessages(
     db,
     // Not streamed, so latency here is the full generation time.
-    assistantRows(conversation.id, bubbles, { replyId: newReplyId(), model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt, variant: label }),
+    assistantRows(conversation.id, bubbles, { replyId, model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt, variant: label }),
   );
   await markCheckIn(db, persona.id).catch(() => {});
+  if (news) await recordMentions(db, { conversationId: conversation.id, replyId, items: mentionedItems(text, news.items) }).catch(() => {});
   return saved;
 }

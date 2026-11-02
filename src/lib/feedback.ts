@@ -119,10 +119,11 @@ function numbers<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 export async function getStats(db: SupabaseClient, days: number) {
-  const [replies, retention, experiments] = await Promise.all([
+  const [replies, retention, experiments, news] = await Promise.all([
     db.rpc("persona_stats", { p_days: days }),
     db.rpc("persona_retention", { p_days: days }),
     getExperimentStats(db),
+    getNewsStats(db, days),
   ]);
   if (replies.error) throw replies.error;
   if (retention.error) throw retention.error;
@@ -130,6 +131,32 @@ export async function getStats(db: SupabaseClient, days: number) {
     replies: numbers<PersonaStatsRow>(replies.data ?? []),
     retention: numbers<RetentionRow>(retention.data ?? []),
     experiments,
+    news,
+  };
+}
+
+export type NewsStatsRow = { dimension: "topic" | "region"; value: string; users: number; mentions: number; enough_data: boolean; engaged: number | null; decided: number | null };
+
+/** The current digest and how users engage with news (null until schema v7 is run). */
+async function getNewsStats(db: SupabaseClient, days: number) {
+  const [state, items, stats] = await Promise.all([
+    db.from("news_state").select("refreshed_at").maybeSingle(),
+    db.from("news_items").select("topic, region, sensitive").gte("fetched_at", new Date(Date.now() - 48 * 3_600_000).toISOString()),
+    db.rpc("news_stats", { p_days: days }),
+  ]);
+  if (state.error || items.error || stats.error) return null;
+  const count = (k: "topic" | "region") =>
+    Object.entries((items.data ?? []).reduce<Record<string, number>>((a, i) => ((a[i[k] as string] = (a[i[k] as string] ?? 0) + 1), a), {})).sort(
+      (a, b) => b[1] - a[1],
+    );
+  return {
+    refreshedAt: (state.data?.refreshed_at as string | null) ?? null,
+    items: items.data?.length ?? 0,
+    sensitive: (items.data ?? []).filter((i) => i.sensitive).length,
+    byTopic: count("topic"),
+    byRegion: count("region"),
+    engagement: numbers<NewsStatsRow>(stats.data ?? []),
+    configured: Boolean(process.env.NEWS_INGEST_KEY),
   };
 }
 

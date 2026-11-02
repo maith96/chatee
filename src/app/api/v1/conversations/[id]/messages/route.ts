@@ -5,7 +5,8 @@ import { friendlyError, getConversation, isRateLimited, MAX_MESSAGE_CHARS, start
 import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
 
-export const maxDuration = 60;
+// Room for after-reply work (memories, and sometimes refreshing the shared news digest).
+export const maxDuration = 300;
 
 type Params = { id: string };
 

@@ -9,6 +9,7 @@ import { signOut } from "@/app/login/actions";
 import { Avatar } from "./avatar";
 import { Logo } from "./logo";
 import { MemoryPanel } from "./memory-panel";
+import { SettingsPanel } from "./settings-panel";
 import { ChatView } from "./chat-view";
 import { ModelPicker } from "./model-picker";
 import { PersonaProfile } from "./persona-profile";
@@ -48,6 +49,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   // For a new chat: undefined = still choosing, null = plain assistant, otherwise a persona.
   const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
   const [showMemory, setShowMemory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -183,6 +185,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
             <form action={signOut}>
               <button className="text-accent hover:underline">Sign out</button>
             </form>
+            <button onClick={() => setShowSettings(true)} className="text-accent hover:underline">Settings</button>
             {admin && <a href="/admin/stats" className="text-accent hover:underline">Stats</a>}
           </div>
           <p className="mt-3 text-xs text-muted">
@@ -240,6 +243,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
         />
         )}
       </main>
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showMemory && currentPersona && <MemoryPanel persona={currentPersona} onClose={() => setShowMemory(false)} />}
       {profileOpen && currentPersona && !choosing && <PersonaProfile persona={currentPersona} onClose={() => setProfileOpen(false)} />}
     </div>

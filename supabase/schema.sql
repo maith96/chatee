@@ -515,5 +515,162 @@ grant execute on function public.experiment_stats(text) to authenticated;
 alter table public.profiles add column if not exists personalize boolean not null default true;
 alter table public.relationships add column if not exists style_reset_at timestamptz;
 
+-- =====================================================================
+-- v7: today's news in conversations. Safe to re-run.
+-- A shared digest (news_items) that every signed-in user can read. Only the server can write it,
+-- via functions that require the private ingest key (set once below, and as NEWS_INGEST_KEY on Vercel).
+-- =====================================================================
+create table if not exists public.news_items (
+  id            text primary key,          -- hash of the article link
+  title         text not null,
+  summary       text not null,
+  topic         text not null,
+  region        text not null,
+  sensitive     boolean not null default false,
+  political     boolean not null default false,
+  source        text not null,
+  url           text,
+  published_at  timestamptz,
+  fetched_at    timestamptz not null default now()
+);
+create index if not exists news_items_fetched_idx on public.news_items (fetched_at desc);
+alter table public.news_items enable row level security;
+grant select on public.news_items to authenticated;
+drop policy if exists "read news" on public.news_items;
+create policy "read news" on public.news_items for select to authenticated using (true);
+
+create table if not exists public.news_state (
+  id            integer primary key default 1 check (id = 1),
+  refreshed_at  timestamptz,
+  attempt_at    timestamptz
+);
+insert into public.news_state (id) values (1) on conflict do nothing;
+alter table public.news_state enable row level security;
+grant select on public.news_state to authenticated;
+drop policy if exists "read news state" on public.news_state;
+create policy "read news state" on public.news_state for select to authenticated using (true);
+
+-- Private settings: not exposed through the API at all.
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+create table if not exists private.settings (name text primary key, value text not null);
+-- A random ingest key, created once. Copy it into Vercel as NEWS_INGEST_KEY (see the bottom of this file).
+insert into private.settings (name, value)
+values ('news_ingest_key', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+on conflict (name) do nothing;
+
+create or replace function private.check_news_key(p_key text) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if p_key is null or p_key <> (select value from private.settings where name = 'news_ingest_key') then
+    raise exception 'Invalid news ingest key.' using errcode = '42501';
+  end if;
+end;
+$$;
+
+-- Lets one refresh run at a time (at most one every 10 minutes unless forced).
+create or replace function public.news_claim_refresh(p_key text, p_force boolean default false)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare claimed boolean;
+begin
+  perform private.check_news_key(p_key);
+  update public.news_state set attempt_at = now()
+  where id = 1 and (p_force or attempt_at is null or attempt_at < now() - interval '10 minutes')
+  returning true into claimed;
+  return coalesce(claimed, false);
+end;
+$$;
+
+-- Saves a digest and drops items older than 7 days.
+create or replace function public.news_ingest(p_key text, p_items jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  perform private.check_news_key(p_key);
+  insert into public.news_items (id, title, summary, topic, region, sensitive, political, source, url, published_at, fetched_at)
+  select i.id, left(i.title, 300), left(i.summary, 500), i.topic, i.region, coalesce(i.sensitive, false), coalesce(i.political, false),
+         left(i.source, 60), left(i.url, 500), i.published_at, now()
+  from jsonb_to_recordset(p_items) as i(id text, title text, summary text, topic text, region text, sensitive boolean,
+                                         political boolean, source text, url text, published_at timestamptz)
+  where i.id is not null and i.title is not null and i.summary is not null
+  on conflict (id) do update set summary = excluded.summary, topic = excluded.topic, region = excluded.region,
+    sensitive = excluded.sensitive, political = excluded.political, fetched_at = now();
+  get diagnostics n = row_count;
+  delete from public.news_items where fetched_at < now() - interval '7 days';
+  update public.news_state set refreshed_at = now() where id = 1;
+  return n;
+end;
+$$;
+revoke all on function public.news_claim_refresh(text, boolean) from public, anon;
+revoke all on function public.news_ingest(text, jsonb) from public, anon;
+grant execute on function public.news_claim_refresh(text, boolean) to authenticated;
+grant execute on function public.news_ingest(text, jsonb) to authenticated;
+revoke all on all tables in schema private from public, anon, authenticated;
+revoke all on function private.check_news_key(text) from public, anon, authenticated;
+
+-- Which news a persona brought up to a user, and whether they engaged (metadata only).
+create table if not exists public.news_mentions (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  conversation_id  uuid not null references public.conversations(id) on delete cascade,
+  reply_id         uuid,
+  item_id          text not null,
+  topic            text not null,
+  region           text not null,
+  keywords         text[] not null default '{}',
+  engaged          boolean,
+  created_at       timestamptz not null default now()
+);
+create index if not exists news_mentions_user_idx on public.news_mentions (user_id, created_at desc);
+create index if not exists news_mentions_conversation_idx on public.news_mentions (conversation_id, created_at desc);
+alter table public.news_mentions enable row level security;
+grant select, insert, update on public.news_mentions to authenticated;
+drop policy if exists "own news mentions" on public.news_mentions;
+create policy "own news mentions" on public.news_mentions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- News settings per user: on/off, chosen regions/topics (empty = learn automatically), reset of the learning.
+alter table public.profiles
+  add column if not exists news_enabled  boolean not null default true,
+  add column if not exists news_regions  text[] not null default '{}',
+  add column if not exists news_topics   text[] not null default '{}',
+  add column if not exists news_reset_at timestamptz;
+
+-- Admin: how often each topic/region gets brought up and how often users engage. Counts only.
+create or replace function public.news_stats(p_days integer default 30)
+returns table (dimension text, value text, users bigint, mentions bigint, enough_data boolean, engaged bigint, decided bigint)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can read stats.' using errcode = '42501';
+  end if;
+  return query
+  with m as (
+    select nm.user_id, nm.topic, nm.region,
+           case when nm.engaged is not null then nm.engaged
+                when nm.created_at < now() - interval '24 hours' then false end as engaged
+    from public.news_mentions nm
+    where nm.created_at >= now() - make_interval(days => p_days)
+  ),
+  dims as (
+    select 'topic'::text as dimension, m.topic as value, m.user_id, m.engaged from m
+    union all
+    select 'region', m.region, m.user_id, m.engaged from m
+  )
+  select d.dimension, d.value, count(distinct d.user_id), count(*), count(distinct d.user_id) >= 5,
+         case when count(distinct d.user_id) >= 5 then count(*) filter (where d.engaged) end,
+         case when count(distinct d.user_id) >= 5 then count(*) filter (where d.engaged is not null) end
+  from dims d
+  group by d.dimension, d.value
+  order by d.dimension, count(*) desc;
+end;
+$$;
+revoke all on function public.news_stats(integer) from public, anon;
+grant execute on function public.news_stats(integer) to authenticated;
+
+-- To turn the news feed on: copy this key into Vercel → Settings → Environment Variables as NEWS_INGEST_KEY,
+-- then redeploy. Keep it private (anyone with it could write news).
+--   select value from private.settings where name = 'news_ingest_key';
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

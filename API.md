@@ -192,6 +192,19 @@ Resets the adjustments for this persona (it starts learning again from now) → 
 ### `PATCH /me`
 `{ "personalize": false }` switches style adaptation off for all personas (default on). `GET /me` returns the setting.
 
+### `GET /me/news?timezone=Africa/Nairobi`
+News settings and what's been learned:
+`{ "news": { "enabled": true, "regions": [], "topics": [], "home_region": "africa", "learned": { "topics": [ { "id": "sport", "engagement": 0.8, "mentions": 5 } ], "regions": [] } } }`
+Empty `regions`/`topics` mean "automatic". Regions: `global, africa, asia, europe, uk, north_america, latin_america, middle_east, oceania`.
+Topics: `world, politics, business, tech, science, health, sport, entertainment, culture, climate`.
+
+### `PATCH /me/news`
+`{ "enabled"?: boolean, "regions"?: [...], "topics"?: [...], "reset_learning"?: true }` → same shape as `GET`.
+Send `timezone` with your message requests so personas know the user's region.
+
+### `POST /news/refresh` (admins only)
+Rebuilds the shared news digest now → `{ "status": "refreshed", "items": 45, "feeds": 98 }`.
+
 ### `DELETE /memories/{id}`
 Forget one memory. → `204`
 

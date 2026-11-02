@@ -13,6 +13,8 @@ import { isMissingSchema } from "./db-errors";
 import { assignExperiment } from "./experiment-assign";
 import { activeVariant, applyVariant } from "./experiments";
 import { loadStyle } from "./personalize";
+import { loadNews, mentionedItems, recordMentions, scoreEngagement, type NewsContext } from "./news";
+import { refreshNewsIfStale } from "./news-digest";
 import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 export const SYSTEM_PROMPT =
@@ -226,7 +228,7 @@ export function systemPromptFor(
   persona: Persona | null,
   state: PersonaState | null,
   history: Message[],
-  opts: { latest?: string; timezone?: string; task?: string; styleNote?: string; adjustments?: string[] } = {},
+  opts: { latest?: string; timezone?: string; task?: string; styleNote?: string; adjustments?: string[]; news?: NewsContext | null } = {},
 ) {
   if (!persona) return SYSTEM_PROMPT;
   const lastUser = [...history].reverse().find((m) => m.role === "user");
@@ -244,6 +246,7 @@ export function systemPromptFor(
     task: opts.task,
     styleNote: opts.styleNote,
     adjustments: opts.adjustments,
+    news: opts.news ?? undefined,
   });
 }
 
@@ -281,6 +284,13 @@ export async function startReply(
   const stylePromise = persona ? loadStyle(db, persona).catch((err) => (console.error("Style load failed", err), null)) : Promise.resolve(null);
   // Computed before the new message is saved, so "time since last message" is the real gap.
   const latest = Array.isArray(opts.content) ? opts.content.join("\n") : opts.content;
+  // Today's news this persona has "seen" (skipped in a crisis). Never blocks a reply if it fails.
+  const newsPromise =
+    persona && !detectCrisis(latest)
+      ? loadNews(db, { persona, conversationId: opts.conversation.id, timezone: opts.timezone }).catch(
+          (err) => (console.error("News load failed", err), null),
+        )
+      : Promise.resolve(null);
   const historyForPrompt = [...history];
 
   // Several texts sent in quick succession arrive together and are saved as separate bubbles.
@@ -317,12 +327,13 @@ export async function startReply(
     await updateConversation(db, opts.conversation.id, { model: model.id });
   }
 
-  const style = await stylePromise;
+  const [style, news] = await Promise.all([stylePromise, newsPromise]);
   const instructions = systemPromptFor(persona, state, historyForPrompt, {
     latest,
     timezone: opts.timezone,
     styleNote,
     adjustments: style?.adjustments.map((a) => a.instruction),
+    news,
   });
 
   let streamError: unknown; // the real provider error (result.text only reports "no output")
@@ -385,6 +396,17 @@ export async function startReply(
       await extractMemories(db, persona, contents.join("\n"), bubbles.map((b) => b.content).join("\n"), state.memories);
     } catch (err) {
       console.error("Memory extraction failed", err);
+    }
+    try {
+      // Did they engage with news mentioned earlier? Then: which news did this reply bring up?
+      if (!isRetry) await scoreEngagement(db, opts.conversation.id, contents.join("\n"));
+      if (news) {
+        const reply = bubbles.map((b) => b.content).join("\n");
+        await recordMentions(db, { conversationId: opts.conversation.id, replyId, items: mentionedItems(reply, news.items) });
+      }
+      await refreshNewsIfStale(db); // keeps the shared digest fresh (only one refresh runs at a time)
+    } catch (err) {
+      console.error("News bookkeeping failed", err);
     }
   }
 

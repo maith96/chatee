@@ -6,7 +6,8 @@ import { authenticate, errors, readJson, route } from "@/lib/api";
 import { friendlyError, getConversation, isRateLimited, MAX_MESSAGE_CHARS, startReply } from "@/lib/chat-service";
 import { isModelId, type ModelId } from "@/lib/models";
 
-export const maxDuration = 60;
+// Room for after-reply work (memories, and sometimes refreshing the shared news digest).
+export const maxDuration = 300;
 const MAX_BUBBLES_PER_SEND = 10;
 
 export const POST = route(async (req) => {

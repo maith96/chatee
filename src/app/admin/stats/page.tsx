@@ -5,8 +5,10 @@ import { connection } from "next/server";
 import { getStats, isAdmin, REASON_LABELS, type PersonaStatsRow, type RetentionRow } from "@/lib/feedback";
 import { getModel, isModelId } from "@/lib/models";
 import { describeVariant, EXPERIMENTS } from "@/lib/experiments";
-import { rates, verdict, type ExperimentRow, type Rate } from "@/lib/experiment-results";
+import { rate, rates, verdict, type ExperimentRow, type Rate } from "@/lib/experiment-results";
 import { createClient } from "@/lib/supabase/server";
+import { REGION_LABELS, TOPIC_LABELS, isRegion, isTopic } from "@/lib/news-sources";
+import { RefreshNews } from "./refresh-news";
 
 export const metadata = { title: "Persona stats" };
 
@@ -30,7 +32,7 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
   const params = await searchParams;
   const days = RANGES.includes(Number(params.days)) ? Number(params.days) : 30;
   const kind = params.kind === "checkin" ? "checkin" : "reply";
-  const { replies, retention, experiments } = await getStats(db, days);
+  const { replies, retention, experiments, news } = await getStats(db, days);
   const rows = replies.filter((r) => r.kind === kind);
 
   return (
@@ -84,6 +86,36 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
         ])}
         dim={rows.map((r) => !r.enough_data)}
       />
+
+      <h2 className="mt-10 text-lg font-semibold">News</h2>
+      {!news ? (
+        <p className="mt-2 text-sm text-muted">Run the latest supabase/schema.sql (v7) to turn on the news feed.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-muted">
+            {news.configured ? "" : "NEWS_INGEST_KEY isn't set on the server, so the digest can't refresh. "}
+            Digest: {news.items} stories from the last 48 hours ({news.sensitive} serious ones that personas never raise themselves).
+            Last refreshed {news.refreshedAt ? new Date(news.refreshedAt).toLocaleString("en-GB", { timeZone: "UTC" }) + " UTC" : "never"}.
+          </p>
+          <div className="mt-3"><RefreshNews /></div>
+          <p className="mt-3 text-sm">
+            <span className="text-muted">By region:</span> {news.byRegion.map(([k, n]) => `${isRegion(k) ? REGION_LABELS[k] : k} ${n}`).join(" · ") || "–"}
+            <br />
+            <span className="text-muted">By topic:</span> {news.byTopic.map(([k, n]) => `${isTopic(k) ? TOPIC_LABELS[k] : k} ${n}`).join(" · ") || "–"}
+          </p>
+          <Table
+            empty="Personas haven't brought up any news yet."
+            head={["Topic or region", "Users", "Times brought up", "User engaged"]}
+            rows={news.engagement.map((r) => [
+              `${r.dimension === "topic" ? "Topic" : "Region"}: ${r.dimension === "topic" && isTopic(r.value) ? TOPIC_LABELS[r.value] : isRegion(r.value) ? REGION_LABELS[r.value] : r.value}`,
+              r.users,
+              r.mentions,
+              range(rate(r.engaged, r.decided)),
+            ])}
+            dim={news.engagement.map((r) => !r.enough_data)}
+          />
+        </>
+      )}
 
       <h2 className="mt-10 text-lg font-semibold">Do people come back?</h2>
       <p className="mt-1 text-sm text-muted">

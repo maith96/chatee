@@ -98,6 +98,15 @@ per session; check-ins are shown separately.
   `insert into public.admins (user_id) select id from auth.users where email = 'you@example.com';`
 - Bump `PROMPT_VERSION` in `src/lib/prompt-builder.ts` when you change the prompt layers.
 
+**Today's news:** a shared digest (`news_items`) built from free RSS feeds (`src/lib/news-sources.ts`): a fast model
+condenses about 100 headlines into about 45 neutral, tagged stories (topic, region, serious, political). It refreshes in the
+background after a chat once it's 4+ hours old (or with **Refresh now** on `/admin/stats`). Each reply gets the 4 stories that
+best fit the persona's interests and the user (home region from their timezone, plus what they've engaged with). Personas
+bring one up about once every 6 messages (at most once per 3 hours per chat), never raise serious stories themselves, never
+add details from memory, and don't take political sides; no news during a crisis. Users control it in **Settings** (on/off,
+regions, topics, reset what's been learned). Setup: run `schema.sql` (v7), then copy the ingest key it creates into Vercel as
+`NEWS_INGEST_KEY` (see the bottom of `schema.sql`). Only the server can write news.
+
 **Per-user style:** each persona tunes how it texts to each user (`src/lib/personalize.ts`): shorter or more
 detailed replies, more variety or a calmer tone from repeated 👎 reasons (2+), and briefer/fuller replies or fewer emoji
 from how the user texts (10+ messages). Adjustments come from a fixed list and only touch style, never personality,
