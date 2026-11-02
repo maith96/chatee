@@ -1,18 +1,20 @@
 import { assertUuid, authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { deleteConversation, getConversation, listMessages, updateConversation } from "@/lib/chat-service";
+import { listFeedback } from "@/lib/feedback";
 import { isModelAvailable } from "@/lib/providers";
 import { isModelId, type ModelId } from "@/lib/models";
 
 type Params = { id: string };
 
-// GET /api/v1/conversations/{id} — the conversation plus all its messages.
+// GET /api/v1/conversations/{id} — the conversation, all its messages, and your ratings of its replies.
 export const GET = route<Params>(async (req, { params }) => {
   const { id } = await params;
   assertUuid(id);
   const { db } = await authenticate(req);
   const conversation = await getConversation(db, id);
   if (!conversation) throw errors.notFound("Conversation");
-  return json(req, { conversation, messages: await listMessages(db, id) });
+  const [messages, feedback] = await Promise.all([listMessages(db, id), listFeedback(db, id)]);
+  return json(req, { conversation, messages, feedback });
 });
 
 // PATCH /api/v1/conversations/{id}  { "title"?: string, "model"?: string }

@@ -32,7 +32,7 @@ export const POST = route<Params>(async (req, { params }) => {
   if (!conversation) throw errors.notFound("Conversation");
   if (await isRateLimited(db)) throw errors.rateLimited();
 
-  const { result, userMessage, saved, getError, learn } = await startReply(db, {
+  const { result, replyId, userMessage, saved, getError, learn } = await startReply(db, {
     conversation,
     content,
     model: body.model as ModelId | undefined,
@@ -49,6 +49,7 @@ export const POST = route<Params>(async (req, { params }) => {
       headers: {
         ...corsHeaders(req),
         "X-User-Message-Id": userMessage.id,
+        "X-Reply-Id": replyId, // for PUT /api/v1/replies/{reply_id}/feedback
         "Cache-Control": "no-cache",
         ...(crisis ? { "X-Crisis-Support": "1" } : {}),
       },
@@ -68,6 +69,7 @@ export const POST = route<Params>(async (req, { params }) => {
     req,
     {
       user_message: userMessage,
+      reply_id: replyId,
       assistant_messages: assistantMessages,
       ...(crisis ? { crisis_support: CRISIS_RESOURCES } : {}),
     },

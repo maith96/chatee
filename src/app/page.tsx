@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { AgeGate } from "@/components/age-gate";
 import ChatApp from "@/components/chat-app";
 import { isAdultConfirmed } from "@/lib/age";
+import { isAdmin } from "@/lib/feedback";
 import { createClient } from "@/lib/supabase/server";
 
 export default function Home() {
@@ -20,5 +21,6 @@ async function SignedInChat() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
   if (!(await isAdultConfirmed(supabase, data.user))) return <AgeGate />;
-  return <ChatApp email={data.user.email ?? ""} />;
+  const admin = await isAdmin(supabase).catch(() => false); // false until schema v4 is run
+  return <ChatApp email={data.user.email ?? ""} admin={admin} />;
 }

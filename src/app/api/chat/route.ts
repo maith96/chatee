@@ -24,7 +24,7 @@ export const POST = route(async (req) => {
   if (!conversation) throw errors.notFound("Conversation");
   if (await isRateLimited(db)) throw errors.rateLimited();
 
-  const { result, learn } = await startReply(db, {
+  const { result, replyId, learn } = await startReply(db, {
     conversation,
     content: contents,
     model: isModelId(body.model) ? (body.model as ModelId) : undefined,
@@ -34,6 +34,11 @@ export const POST = route(async (req) => {
   after(learn); // update memories once the reply is done, without delaying it
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream, onError: friendlyError }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      onError: friendlyError,
+      // Lets the UI rate this reply (thumbs up/down) as soon as it's done.
+      messageMetadata: ({ part }) => (part.type === "start" ? { replyId, createdAt: new Date().toISOString() } : undefined),
+    }),
   });
 });

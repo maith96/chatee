@@ -44,6 +44,7 @@ src/
   app/
     page.tsx                         # chat page (requires sign-in)
     login/                           # sign in / sign up
+    admin/stats/                     # persona stats (admins only)
     auth/callback/route.ts           # email confirmation links
     api/chat/route.ts                # streaming endpoint for the website UI
     api/v1/...                       # public REST API for other apps (see API.md)
@@ -52,6 +53,7 @@ src/
     chat-service.ts                  # shared chat logic: history, Gemini call, saving, rate limit
     models.ts                        # "Terra Fast" etc. → Gemini model IDs
     api.ts                           # API auth (Bearer token or cookie), errors, CORS
+    reply-stats.ts, feedback.ts      # reply style metadata, thumbs up/down, admin stats
     supabase/                        # Supabase clients
   proxy.ts                           # keeps the login session fresh; redirects signed-out users
 supabase/schema.sql                  # tables + Row Level Security
@@ -80,6 +82,21 @@ and delete them via the 🧠 Memory button. `relationships` tracks how much they
 
 **Safety layers:** crisis language and "I'm under 18" statements are detected in code and add an urgent instruction
 to that reply; crisis messages also always show a helpline card in the UI (and `crisis_support` in the API).
+
+### Learning from user interaction
+
+Every reply is saved with style metadata (words, emoji, bubbles, whether it asks a question, time to the first word,
+a `prompt_version` that changes when the persona or prompt builder changes) and a `reply_id` shared by its bubbles.
+Users can rate replies with 👍 / 👎 (optional reason). Admins get a stats page at **`/admin/stats`** with, per persona
+and model: thumbs-up rate, how often and how fast users answer, reply style, latency, day-1/day-7 return and messages
+per session; check-ins are shown separately.
+
+- Only metadata is used: the stats functions never read message text and return no user ids.
+- Messages around a crisis (and the 24 hours after) are left out. Groups with fewer than 5 users show counts only.
+- Main measures are **thumbs up** and **day-7 return**, not message volume, so we don't optimise for clinginess.
+- Make yourself an admin once in the SQL Editor (see the bottom of `supabase/schema.sql`):
+  `insert into public.admins (user_id) select id from auth.users where email = 'you@example.com';`
+- Bump `PROMPT_VERSION` in `src/lib/prompt-builder.ts` when you change the prompt layers.
 
 ### Testing persona quality
 

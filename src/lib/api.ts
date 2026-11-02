@@ -21,6 +21,7 @@ export const errors = {
   ageRequired: () =>
     new ApiError(403, "age_confirmation_required", "Confirm you're 18 or older first: POST /api/v1/me/age { birthdate }."),
   rateLimited: () => new ApiError(429, "rate_limited", "Too many messages. Please wait a minute."),
+  forbidden: (message = "You don't have access to this.") => new ApiError(403, "forbidden", message),
 };
 
 /**

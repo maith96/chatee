@@ -9,6 +9,9 @@ import { BUBBLE_SEPARATOR } from "./bubbles";
 export { detectCrisis, detectMinor } from "./crisis";
 import type { PersonaDefinition } from "./persona-schema";
 
+/** Bump when the prompt layers change meaningfully, so stats can compare before and after. */
+export const PROMPT_VERSION = "p1";
+
 export type Stage = "new" | "warm" | "close";
 
 export type PromptContext = {

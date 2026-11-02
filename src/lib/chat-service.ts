@@ -8,6 +8,7 @@ import { getPersona, type Persona } from "./personas";
 import { bumpRelationship, extractMemories, getRelationship, listMemories, stageFor, type Memory, type Relationship } from "./memory";
 import { buildPersonaPrompt, detectCrisis, detectMinor } from "./prompt-builder";
 import { defaultModelId, resolveModel } from "./providers";
+import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 export const SYSTEM_PROMPT =
   "You are Persona, a friendly and helpful AI assistant. Answer clearly and concisely. " +
@@ -32,11 +33,13 @@ export type Message = {
   content: string;
   model: string | null;
   kind?: "reply" | "checkin";
+  /** Shared by all bubbles of one assistant reply; feedback is given per reply. */
+  reply_id?: string | null;
   created_at: string;
 };
 
 const CONVERSATION_FIELDS = "id, title, model, persona_id, created_at, updated_at";
-const MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, created_at";
+const MESSAGE_FIELDS = "id, conversation_id, role, content, model, kind, reply_id, created_at";
 export const DEFAULT_TITLE = "New conversation";
 
 // ---- Conversations -------------------------------------------------------
@@ -110,6 +113,16 @@ type NewMessage = {
   model?: string;
   kind?: "reply" | "checkin";
   created_at?: string;
+  // Metadata for stats (see reply-stats.ts and schema v4).
+  reply_id?: string;
+  prompt_version?: string;
+  words?: number;
+  emoji?: number;
+  has_question?: boolean;
+  bubble_index?: number;
+  bubble_count?: number;
+  latency_ms?: number;
+  crisis?: boolean;
 };
 
 /** Saves several bubbles at once, 1ms apart so they keep their order. */
@@ -215,7 +228,16 @@ export async function startReply(
   if (isRetry) history.splice(start);
   const userMessages = isRetry
     ? trailing
-    : await insertMessages(db, contents.map((content) => ({ conversation_id: opts.conversation.id, role: "user" as const, content })));
+    : await insertMessages(
+        db,
+        contents.map((content) => ({
+          conversation_id: opts.conversation.id,
+          role: "user" as const,
+          content,
+          words: countWords(content),
+          crisis: detectCrisis(content),
+        })),
+      );
   const userMessage = userMessages.at(-1)!;
   // Count each text towards the relationship (they were separate messages).
   if (persona && !isRetry) for (let i = 0; i < contents.length; i++) await bumpRelationship(db, persona.id);
@@ -230,6 +252,9 @@ export async function startReply(
   }
 
   let streamError: unknown; // the real provider error (result.text only reports "no output")
+  const replyId = newReplyId();
+  const startedAt = Date.now();
+  let firstTokenAt: number | undefined;
   let resolveSaved!: (m: Message[]) => void;
   const saved = new Promise<Message[]>((r) => (resolveSaved = r));
 
@@ -239,6 +264,9 @@ export async function startReply(
     instructions,
     messages: toModelMessages([...history.slice(-HISTORY_LIMIT), ...userMessages]),
     abortSignal: opts.abortSignal,
+    onChunk: ({ chunk }) => {
+      if (firstTokenAt === undefined && chunk.type === "text-delta") firstTokenAt = Date.now();
+    },
     onEnd: async ({ text }) => {
       try {
         // Persona replies can be several bubbles: one row each. The plain assistant keeps one row.
@@ -252,7 +280,12 @@ export async function startReply(
           parts.length
             ? await insertMessages(
                 db,
-                parts.map((content) => ({ conversation_id: opts.conversation.id, role: "assistant", content, model: model.id })),
+                assistantRows(opts.conversation.id, parts, {
+                  replyId,
+                  model: model.id,
+                  persona,
+                  latencyMs: firstTokenAt !== undefined ? firstTokenAt - startedAt : undefined,
+                }),
               )
             : [],
         );
@@ -280,7 +313,7 @@ export async function startReply(
     }
   }
 
-  return { result, userMessage, userMessages, saved, model, persona, learn, getError: () => streamError };
+  return { result, replyId, userMessage, userMessages, saved, model, persona, learn, getError: () => streamError };
 }
 
 /** Turns provider errors into a message that is safe and useful to show users. */

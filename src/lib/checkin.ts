@@ -19,6 +19,7 @@ import { detectCrisis } from "./crisis";
 import { markCheckIn } from "./memory";
 import { getPersona } from "./personas";
 import { resolveModel } from "./providers";
+import { assistantRows, newReplyId } from "./reply-stats";
 
 function safeZone(tz?: string) {
   try {
@@ -71,6 +72,7 @@ Write it as if you're simply texting them first. Never mention the app, the chat
   const instructions = systemPromptFor(persona, state, history, { timezone: opts.timezone, task });
 
   const { model, languageModel, providerOptions } = resolveModel(conversation.model);
+  const startedAt = Date.now();
   const { text } = await generateText({
     model: languageModel,
     providerOptions,
@@ -87,7 +89,8 @@ Write it as if you're simply texting them first. Never mention the app, the chat
   if (!bubbles.length) return [];
   const saved = await insertMessages(
     db,
-    bubbles.map((content) => ({ conversation_id: conversation.id, role: "assistant", content, model: model.id, kind: "checkin" })),
+    // Not streamed, so latency here is the full generation time.
+    assistantRows(conversation.id, bubbles, { replyId: newReplyId(), model: model.id, persona, kind: "checkin", latencyMs: Date.now() - startedAt }),
   );
   await markCheckIn(db, persona.id).catch(() => {});
   return saved;

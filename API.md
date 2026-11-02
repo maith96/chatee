@@ -99,8 +99,11 @@ The title is set automatically from the first message if you leave it as the def
 { "conversation": { ... },
   "messages": [ { "id": "uuid", "conversation_id": "uuid", "role": "user", "content": "Hi",
                   "model": null, "created_at": "..." },
-                { "id": "uuid", "role": "assistant", "content": "Hello!", "model": "terra-fast", ... } ] }
+                { "id": "uuid", "role": "assistant", "content": "Hello!", "model": "terra-fast",
+                  "kind": "reply", "reply_id": "uuid", ... } ],
+  "feedback": [ { "reply_id": "uuid", "rating": 1, "reason": null } ] }
 ```
+All bubbles of one assistant reply share a `reply_id`. `feedback` holds your ratings of this chat's replies.
 
 ### `PATCH /conversations/{id}`
 Body: `{ "title"?: string, "model"?: string }` → `{ "conversation": { ... } }`
@@ -121,6 +124,7 @@ Body:
 **`stream: false` (default)** waits for the full reply, then returns `201`:
 ```json
 { "user_message": { "id": "...", "role": "user", "content": "..." },
+  "reply_id": "...",
   "assistant_messages": [ { "id": "...", "role": "assistant", "content": "WAIT" },
                           { "id": "...", "role": "assistant", "content": "you got the job??? 😭" } ] }
 ```
@@ -130,6 +134,7 @@ Show them as separate bubbles, ideally with a short typing pause between them.
 **`stream: true`** returns the reply as **plain text, streamed in chunks** as it's generated
 (`Content-Type: text/plain`). For personas, bubbles are separated by a line containing only `|||`
 (blank lines can also start a new bubble). The reply is saved when it finishes. Re-fetch the conversation for the saved IDs.
+The `X-Reply-Id` response header gives the reply's id (for feedback).
 
 ```js
 const res = await fetch(`${BASE}/conversations/${id}/messages`, {
@@ -181,6 +186,20 @@ Forget one memory. → `204`
 
 ### `DELETE /personas/{id}/memories`
 Make the persona forget everything about the user. → `204`
+
+### `PUT /replies/{reply_id}/feedback`
+Thumbs up/down on a persona reply (rates all its bubbles). Sending again changes the rating.
+Body: `{ "rating": 1 | -1, "reason"?: "too_long" | "too_short" | "out_of_character" | "repetitive" | "too_much" | "other" }`
+→ `{ "feedback": { "reply_id": "...", "rating": -1, "reason": "too_long" } }`. The reason is kept only with thumbs down.
+Show the icons under the last bubble of each reply; they're always visible on the website.
+
+### `DELETE /replies/{reply_id}/feedback`
+Removes your rating → `204`.
+
+### `GET /stats?days=30` (admins only)
+Aggregate persona metrics: `{ "days": 30, "replies": [ ... ], "retention": [ ... ] }`, by persona, model and kind
+(reply / check-in). Counts and averages only, no message text or user ids. Groups with fewer than 5 users have
+`enough_data: false` and no metrics. Others get `403 forbidden`.
 
 ## Quick test with curl
 

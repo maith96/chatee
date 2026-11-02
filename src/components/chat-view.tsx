@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { joinBubbles, splitBubbles, stripPartialSeparator } from "@/lib/bubbles";
 import { CRISIS_RESOURCES, detectCrisis } from "@/lib/crisis";
 import type { Message } from "@/lib/chat-service";
+import { FEEDBACK_REASONS, REASON_LABELS, type Feedback, type FeedbackReason } from "@/lib/feedback";
 import { getModel, type ModelId } from "@/lib/models";
 import type { PersonaSummary } from "@/lib/personas";
 import { Avatar } from "./avatar";
@@ -32,10 +33,15 @@ const timezone = () => {
 /** Lets any avatar in the chat open the persona's profile without threading a prop through every component. */
 const ProfileContext = createContext<(() => void) | undefined>(undefined);
 
-type Meta = { createdAt?: string };
+type Rate = (replyId: string, rating: 1 | -1 | null, reason?: FeedbackReason | null) => void;
+/** Your ratings of this chat's replies, keyed by reply id, and how to change them. */
+const FeedbackContext = createContext<{ ratings: Record<string, Feedback>; rate: Rate } | null>(null);
+
+type Meta = { createdAt?: string; replyId?: string | null };
 type Queued = { id: number; text: string; at: string };
 
 const createdAtOf = (m: UIMessage) => (m.metadata as Meta | undefined)?.createdAt;
+const replyIdOf = (m: UIMessage) => (m.metadata as Meta | undefined)?.replyId ?? undefined;
 const textParts = (m: UIMessage) => m.parts.flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text] : []));
 function clock(iso: string | undefined) {
   if (!iso) return "";
@@ -57,6 +63,7 @@ export function ChatView(props: Props) {
   const { conversationId, pendingText } = props;
   const needsLoad = Boolean(conversationId && pendingText === undefined);
   const [initial, setInitial] = useState<UIMessage[] | null>(needsLoad ? null : []);
+  const [initialFeedback, setInitialFeedback] = useState<Feedback[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,15 +73,21 @@ export function ChatView(props: Props) {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error?.message ?? "Could not load this chat.");
         setInitial(
-          (data.messages as Message[]).map((m) => ({ id: m.id, role: m.role, parts: [{ type: "text", text: m.content }], metadata: { createdAt: m.created_at } })),
+          (data.messages as Message[]).map((m) => ({
+            id: m.id,
+            role: m.role,
+            parts: [{ type: "text", text: m.content }],
+            metadata: { createdAt: m.created_at, replyId: m.reply_id },
+          })),
         );
+        setInitialFeedback((data.feedback as Feedback[] | undefined) ?? []);
       })
       .catch((e: Error) => setLoadError(e.message));
   }, [conversationId, needsLoad]);
 
   if (loadError) return <Centered><p className="text-red-500">{loadError}</p></Centered>;
   if (!initial) return <Centered><Typing /></Centered>;
-  return <ChatSession {...props} initialMessages={initial} />;
+  return <ChatSession {...props} initialMessages={initial} initialFeedback={initialFeedback} />;
 }
 
 function ChatSession({
@@ -86,7 +99,8 @@ function ChatSession({
   onReplied,
   onOpenProfile,
   initialMessages,
-}: Props & { initialMessages: UIMessage[] }) {
+  initialFeedback = [],
+}: Props & { initialMessages: UIMessage[]; initialFeedback?: Feedback[] }) {
   const [input, setInput] = useState("");
   // Bubbles you've sent that the persona hasn't "read" yet; sent together once you pause.
   const [queue, setQueue] = useState<Queued[]>([]);
@@ -95,6 +109,31 @@ function ChatSession({
   const [startError, setStartError] = useState<string | null>(null);
   const savedIds = useMemo(() => new Set(initialMessages.map((m) => m.id)), [initialMessages]);
   const name = persona?.name ?? getModel(model).name;
+
+  const [ratings, setRatings] = useState<Record<string, Feedback>>(() =>
+    Object.fromEntries(initialFeedback.map((f) => [f.reply_id, f])),
+  );
+  const feedback = useMemo(() => {
+    const rate: Rate = (replyId, rating, reason = null) => {
+      // Optimistic: update now, save in the background.
+      setRatings((r) => {
+        const next = { ...r };
+        if (rating === null) delete next[replyId];
+        else next[replyId] = { reply_id: replyId, rating, reason: rating === -1 ? reason : null };
+        return next;
+      });
+      const url = `/api/v1/replies/${replyId}/feedback`;
+      const save = () =>
+        rating === null
+          ? fetch(url, { method: "DELETE" })
+          : fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rating, reason }) });
+      // A reply that just finished may still be saving: try once more shortly after.
+      save()
+        .then((res) => (res.status === 404 ? new Promise((r) => setTimeout(r, 1500)).then(save) : res))
+        .catch(() => {});
+    };
+    return { ratings, rate };
+  }, [ratings]);
 
   const transport = useMemo(
     () =>
@@ -149,7 +188,7 @@ function ChatSession({
             id: `checkin-${fresh[0].id}`,
             role: "assistant",
             parts: [{ type: "text", text: joinBubbles(fresh.map((m) => m.content)) }],
-            metadata: { createdAt: fresh[0].created_at },
+            metadata: { createdAt: fresh[0].created_at, replyId: fresh[0].reply_id },
           },
         ]);
         onReplied();
@@ -214,6 +253,7 @@ function ChatSession({
 
   return (
     <ProfileContext.Provider value={onOpenProfile}>
+    <FeedbackContext.Provider value={feedback}>
       <div className="flex-1 overflow-y-auto px-3 py-6 sm:px-4 md:px-8">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 && !busy && (
@@ -247,6 +287,8 @@ function ChatSession({
                 // Saved bubbles are separate rows: only the first in a run gets the avatar.
                 continued={prev?.role === m.role}
                 lastInRun={next?.role !== m.role && !(m.role === "user" && queue.length)}
+                // A saved reply followed straight by a check-in: each gets its own time and rating.
+                endOfReply={m.role === "assistant" && (next?.role !== "assistant" || replyIdOf(next) !== replyIdOf(m))}
                 receipt={m.role === "user" && m.id === lastUserId && !queue.length ? (error ? "Not delivered" : "Read") : undefined}
                 live={live}
                 streaming={live && streaming && i === messages.length - 1}
@@ -306,6 +348,7 @@ function ChatSession({
           {persona ? `${persona.name} is an AI character. Things they say aren't real facts.` : "AI can make mistakes. Check important info."}
         </p>
       </div>
+    </FeedbackContext.Provider>
     </ProfileContext.Provider>
   );
 }
@@ -343,6 +386,7 @@ function MessageBubbles({
   persona,
   continued,
   lastInRun,
+  endOfReply = false,
   receipt,
   live,
   streaming,
@@ -352,6 +396,7 @@ function MessageBubbles({
   persona: PersonaSummary | null;
   continued: boolean;
   lastInRun: boolean;
+  endOfReply?: boolean;
   receipt?: string;
   live: boolean;
   streaming: boolean;
@@ -405,12 +450,68 @@ function MessageBubbles({
           <AssistantBubble text={text} plain={isPersonaReply} />
         </Row>
       ))}
-      {lastInRun && !waitingForNext && <Meta role="assistant">{time}</Meta>}
+      {(lastInRun || endOfReply) && !waitingForNext && (
+        <Meta role="assistant">
+          {time}
+          {isPersonaReply && replyIdOf(message) && <Rating replyId={replyIdOf(message)!} />}
+        </Meta>
+      )}
       {/* "Typing…" while the next bubble is being written or paced in. */}
       {waitingForNext && (
         <Row role="assistant" persona={persona} hideAvatar={continued || visible.length > 0}><Typing /></Row>
       )}
     </div>
+  );
+}
+
+function Thumb({ down = false, active }: { down?: boolean; active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill={active ? "currentColor" : "none"}
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={down ? { transform: "scaleY(-1)" } : undefined}>
+      <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3Zm0 0 4-7a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2.3l-1.4 7A2 2 0 0 1 17.6 21H7" />
+    </svg>
+  );
+}
+
+/** Small thumbs up/down under a persona reply. Thumbs down offers optional reasons. */
+function Rating({ replyId }: { replyId: string }) {
+  const ctx = useContext(FeedbackContext);
+  const [asking, setAsking] = useState(false);
+  if (!ctx) return null;
+  const current = ctx.ratings[replyId];
+  const btn = "rounded-md p-1 hover:bg-panel hover:text-text";
+  return (
+    <>
+      <span className="ml-2 inline-flex items-center gap-0.5 align-middle">
+        <button type="button" aria-label="Good reply" aria-pressed={current?.rating === 1}
+          className={`${btn} ${current?.rating === 1 ? "text-accent" : ""}`}
+          onClick={() => { setAsking(false); ctx.rate(replyId, current?.rating === 1 ? null : 1); }}>
+          <Thumb active={current?.rating === 1} />
+        </button>
+        <button type="button" aria-label="Bad reply" aria-pressed={current?.rating === -1}
+          className={`${btn} ${current?.rating === -1 ? "text-accent" : ""}`}
+          onClick={() => {
+            const undo = current?.rating === -1;
+            setAsking(!undo);
+            ctx.rate(replyId, undo ? null : -1);
+          }}>
+          <Thumb down active={current?.rating === -1} />
+        </button>
+      </span>
+      {asking && current?.rating === -1 && (
+        <span className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="What was wrong?">
+          {FEEDBACK_REASONS.map((r) => (
+            <button key={r} type="button" aria-pressed={current.reason === r}
+              onClick={() => { ctx.rate(replyId, -1, r); setAsking(false); }}
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${current.reason === r ? "border-accent text-accent" : "border-border hover:border-accent"}`}>
+              {REASON_LABELS[r]}
+            </button>
+          ))}
+          <button type="button" aria-label="Close" onClick={() => setAsking(false)} className="px-1 text-xs hover:text-text">✕</button>
+        </span>
+      )}
+    </>
   );
 }
 

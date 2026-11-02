@@ -33,7 +33,7 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function ChatApp({ email }: { email: string }) {
+export default function ChatApp({ email, admin = false }: { email: string; admin?: boolean }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -175,9 +175,15 @@ export default function ChatApp({ email }: { email: string }) {
             <span className="h-2 w-2 rounded-full bg-emerald-500" /> Signed in
           </div>
           <div className="mt-1 truncate text-muted">{email}</div>
-          <form action={signOut}>
-            <button className="mt-2 text-accent hover:underline">Sign out</button>
-          </form>
+          <div className="mt-2 flex gap-4">
+            <form action={signOut}>
+              <button className="text-accent hover:underline">Sign out</button>
+            </form>
+            {admin && <a href="/admin/stats" className="text-accent hover:underline">Stats</a>}
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            To improve personas we measure reply style and engagement (like reply length and thumbs up/down), not what you say.
+          </p>
         </div>
       </aside>
       <div
