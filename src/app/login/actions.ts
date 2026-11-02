@@ -36,6 +36,28 @@ export async function authenticate(_prev: AuthState, form: FormData): Promise<Au
   redirect("/");
 }
 
+async function siteOrigin() {
+  const h = await headers();
+  const origin = h.get("origin");
+  if (origin) return origin;
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  return host ? `${h.get("x-forwarded-proto") ?? "https"}://${host}` : "";
+}
+
+/**
+ * "Continue with Google": Supabase sends the user to Google, then back to /auth/callback.
+ * New Google accounts confirm they're 18+ (date of birth) on their first visit, like everyone else.
+ */
+export async function signInWithGoogle(): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${await siteOrigin()}/auth/callback`, queryParams: { prompt: "select_account" } },
+  });
+  if (error || !data.url) redirect(`/login?error=${encodeURIComponent(error?.message ?? "Google sign-in isn't available right now.")}`);
+  redirect(data.url);
+}
+
 /** One-time 18+ confirmation for accounts created before the age check existed. */
 export async function confirmAge(_prev: AuthState, form: FormData): Promise<AuthState> {
   const age = checkBirthdate(String(form.get("birthdate") ?? ""));

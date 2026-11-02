@@ -136,6 +136,13 @@ model, and writes a review page to `evals/reports/latest.html`. Run it after cha
 private personas are visible only to their owner; unlisted ones are viewable by link.
 All app users must confirm they're 18+ (date of birth at sign-up; only the confirmation is stored).
 
+## Google sign-in
+
+"Continue with Google" uses Supabase OAuth (`signInWithGoogle` in `src/app/login/actions.ts`, then `/auth/callback`).
+New Google users confirm they're 18+ (date of birth) on their first visit. A Google account with the same email as an
+existing account is linked to it. Setup: a Google Cloud OAuth client (Web) with Supabase's callback URL as redirect URI,
+then Supabase → Authentication → Providers → Google, and `/auth/callback` in Supabase's allowed redirect URLs.
+
 ## Rate limits and fallback
 
 NVIDIA allows **40 requests per minute** per account. To stay under it:
