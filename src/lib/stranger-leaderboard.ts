@@ -16,10 +16,14 @@ export type LeaderRow = {
   city: string;
   /** Which AI wrote this stranger. */
   generated_by: string;
+  /** How they say hi to someone new. */
+  opening_style: string;
   users: number;
   contacts: number;
   decided: number;
   reward: number;
+  /** How many decided contacts answered the first message (raw count, for pooling). */
+  answeredCount: number;
   score: number | null; // 0..1, smoothed
   low: number | null;
   high: number | null;
@@ -79,10 +83,12 @@ export function buildLeaderboard(raw: RawRow[], strangers: Stranger[], segment?:
         region: s.tags.region,
         city: s.tags.city,
         generated_by: s.tags.generated_by || "nova-smart",
+        opening_style: s.tags.opening_style ?? "warm",
         users,
         contacts: sum("contacts"),
         decided,
         reward,
+        answeredCount: sum("answered"),
         score: enough ? mean : null,
         low: enough ? Math.max(0, mean - margin) : null,
         high: enough ? Math.min(1, mean + margin) : null,
@@ -122,21 +128,24 @@ export function driftWarnings(board: LeaderRow[]) {
   return warn;
 }
 
-/** How strangers written by each model do, pooled (so models can be compared). */
-export function byGenerator(board: LeaderRow[]) {
+/** Strangers pooled by one property (the model that wrote them, or their opening style), so those can be compared. */
+export function pooledBy(board: LeaderRow[], key: "generated_by" | "opening_style") {
   const groups = new Map<string, LeaderRow[]>();
-  for (const r of board) groups.set(r.generated_by, [...(groups.get(r.generated_by) ?? []), r]);
+  for (const r of board) groups.set(r[key], [...(groups.get(r[key]) ?? []), r]);
   return [...groups.entries()]
-    .map(([generated_by, rows]) => {
+    .map(([value, rows]) => {
       const users = rows.reduce((s, r) => s + r.users, 0);
       const decided = rows.reduce((s, r) => s + r.decided, 0);
       const reward = rows.reduce((s, r) => s + r.reward, 0);
       const enough = users >= MIN_USERS;
       const mean = (1 + reward) / (2 + decided);
       const margin = 1.96 * Math.sqrt((mean * (1 - mean)) / (decided + 3));
+      // The opener's own result: how often people answered the first message.
+      const answered = rows.reduce((s, r) => s + r.answeredCount, 0);
       return {
-        generated_by,
+        value,
         strangers: rows.length,
+        answered: enough && decided ? answered / decided : null,
         users,
         score: enough ? mean : null,
         low: enough ? Math.max(0, mean - margin) : null,
@@ -146,12 +155,14 @@ export function byGenerator(board: LeaderRow[]) {
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.strangers - a.strangers);
 }
 
+export const byGenerator = (board: LeaderRow[]) => pooledBy(board, "generated_by");
+
 export async function getLeaderboard(db: SupabaseClient, segment?: string) {
   const [raw, strangers] = await Promise.all([loadRaw(db), listStrangers(db).catch(() => null)]);
   if (!raw || !strangers) return null;
   const board = buildLeaderboard(raw, strangers, segment);
   const segments = [...new Set(raw.map((r) => r.segment))].filter((s) => s !== "unknown").sort();
-  return { board, segments, warnings: driftWarnings(board), generators: byGenerator(board) };
+  return { board, segments, warnings: driftWarnings(board), generators: byGenerator(board), openingStyles: pooledBy(board, "opening_style") };
 }
 
 export { loadPerformance };

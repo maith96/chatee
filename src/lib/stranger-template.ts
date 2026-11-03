@@ -1,7 +1,7 @@
 // Drafting strangers with an outside model (Claude, ChatGPT, Grok…): the Studio gives the admin a prompt
 // to paste into that model, then imports the JSON it replies with. Every import records which model wrote it.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { defaultOpeningStyle, isOpeningStyle, OPENING_STYLE_IDS, OPENING_STYLES } from "./opening-styles";
+import { defaultFollowUpPace, defaultOpeningStyle, FOLLOW_UP_PACE_IDS, isFollowUpPace, isOpeningStyle, OPENING_STYLE_IDS, OPENING_STYLES } from "./opening-styles";
 import {
   AGES,
   buildDefinition,
@@ -108,6 +108,9 @@ Each person needs 3 first messages they'd send to someone new on the app who has
 - Give each person an opening style that suits them, so they don't all say hi the same way. Use different styles across the batch where you can. The styles:
 ${styles}
 
+## Following up
+When a chat with someone goes quiet, each person texts again at their own pace, which should fit their personality: "eager" (about a day later, for warm, outgoing people), "steady" (2-3 days) or "reserved" (4-5 days, for quieter or busier people). Mix them across the batch.
+
 ## Example messages
 For each person, 8 short example texts in their exact texting style (length, capitalisation, emoji, slang as given above), for these situations: casual chat, the user shares good news, the user is upset, the user sends something very short ("lol" / "ok"), the user asks if they're real, a mild disagreement, they talk about their own day, they ask the user something. Sound like real texts, not lines from a script: mostly plain, humour only sometimes. Where the style splits replies into bubbles, an example can be a list of 2-3 bubbles.
 
@@ -140,6 +143,7 @@ Reply with ONLY a JSON array (no commentary), one object per person, in the orde
     "details": ["4 small concrete life details: people, places, routines, things they own"],
     "role": "how they relate to the user, max 60 chars (e.g. 'a new friend from the app')",
     "opening_style": "${OPENING_STYLE_IDS.join('" | "')}",
+    "follow_up_pace": "${FOLLOW_UP_PACE_IDS.join('" | "')}",
     "openers": ["3 first messages in their opening style: a normal hi plus an easy question, as described above"],
     "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day"]
   }
@@ -226,6 +230,7 @@ export function draftFromImport(j: Record<string, unknown>, generatedBy: string,
       interests: definition.knowledge.interests,
       openers,
       opening_style: isOpeningStyle(j.opening_style) ? j.opening_style : defaultOpeningStyle(name, seed.region),
+      follow_up_pace: isFollowUpPace(j.follow_up_pace) ? j.follow_up_pace : defaultFollowUpPace(definition.personality.sliders),
       generated_by: cut(generatedBy, 40) || "unknown",
     },
     image_prompts: imagePrompts(seed, definition.identity.appearance ?? "", list(j.photo_moments, 3, 200)),

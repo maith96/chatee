@@ -49,3 +49,22 @@ export function defaultOpeningStyle(name: string, region?: string): OpeningStyle
   const pool: OpeningStyle[] = region === "kenya" || region === "africa" ? [...OPENING_STYLE_IDS, "local"] : OPENING_STYLE_IDS.filter((s) => s !== "local");
   return pool[h % pool.length];
 }
+
+// ---------- follow-ups ----------------------------------------------------------------------------
+
+/** How soon a stranger texts again when the chat goes quiet (only to users who have replied to them). */
+export const FOLLOW_UP_PACES = {
+  eager: { label: "Eager (about a day)", hours: 24 },
+  steady: { label: "Steady (2-3 days)", hours: 60 },
+  reserved: { label: "Reserved (4-5 days)", hours: 108 },
+} as const;
+
+export type FollowUpPace = keyof typeof FOLLOW_UP_PACES;
+export const FOLLOW_UP_PACE_IDS = Object.keys(FOLLOW_UP_PACES) as FollowUpPace[];
+export const isFollowUpPace = (x: unknown): x is FollowUpPace => typeof x === "string" && x in FOLLOW_UP_PACES;
+
+/** For strangers saved without a pace: from their personality sliders (warm and energetic people text sooner). */
+export function defaultFollowUpPace(sliders?: { warmth?: number; energy?: number }): FollowUpPace {
+  const score = (sliders?.warmth ?? 3) + (sliders?.energy ?? 3);
+  return score >= 8 ? "eager" : score <= 5 ? "reserved" : "steady";
+}

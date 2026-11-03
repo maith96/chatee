@@ -1,13 +1,16 @@
 import { authenticate, json, preflight, readJson, route } from "@/lib/api";
-import { deliverIfDue, listContacts } from "@/lib/stranger-contacts";
+import { deliverIfDue, listContacts, strangersEnabled } from "@/lib/stranger-contacts";
+import { followUpIfDue } from "@/lib/stranger-followups";
 
 export const maxDuration = 60;
 
 /**
  * POST /api/v1/strangers/sync  { "timezone": "Africa/Nairobi" }
- * Call when the app opens. If a stranger is due to text the user (max one a day, never at night,
- * stops after two are left unanswered), their first message is created. Returns all the user's strangers:
+ * Call when the app opens. If a new stranger is due to text the user (max one a day, fewer when they're
+ * left unanswered, never at night), their first message is created. Otherwise a stranger the user has
+ * talked to may follow up (max one a day). Returns all the user's strangers:
  * `state: "request"` ones belong in a "Message requests" list until the user replies.
+ * `followed_up` is the conversation id that got a follow-up, if any.
  */
 export const POST = route(async (req) => {
   const { db, user } = await authenticate(req);
@@ -17,7 +20,14 @@ export const POST = route(async (req) => {
     console.error("Stranger delivery failed", err);
     return { delivered: null };
   });
-  return json(req, { delivered, contacts: (await listContacts(db, user.id)) ?? [] });
+  // Never two stranger messages in one go: a follow-up only when no new stranger wrote.
+  const followedUp = delivered || !(await strangersEnabled(db))
+    ? null
+    : await followUpIfDue(db, timezone).catch((err) => {
+        console.error("Stranger follow-up failed", err);
+        return null;
+      });
+  return json(req, { delivered, followed_up: followedUp, contacts: (await listContacts(db, user.id)) ?? [] });
 });
 
 export const OPTIONS = preflight;
