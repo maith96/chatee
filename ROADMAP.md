@@ -91,7 +91,19 @@ A WhatsApp-like experience where AI "strangers" DM the user to get to know them 
 - **Frequency (decided):** at most **one new stranger per day**, and none after the user ignores **2 in a row**. No messages during the user's night (timezone).
 - A strangers on/off setting.
 - First version: messages "arrive" when the user opens the app (like check-ins), no scheduler.
-- **Openers** are specific: something from the stranger's life, a shared interest, or a news item.
+- ✅ **Openers** are a normal hi plus one easy question, never a "bit" (a statement about their day, an observation, a joke, the news). Users found the specific ones scripted and cringe.
+- ✅ **Opening styles:** each stranger has one (shy, dry, warm, upbeat, local greeting, "what I'm up to"), set by the drafting model and changeable in the Studio, plus a random question topic per message, so strangers don't all say hi the same way.
+
+### Follow-ups (planned, next)
+
+Strangers currently never text again after the first message. Plan:
+- Only to strangers the user has replied to. Never to requests, ignored or blocked ones.
+- **Personality-driven pace:** each stranger has a follow-up pace (eager about 1 day, steady about 2-3 days, reserved about 4-5 days), chosen by the drafting model and editable in the Studio.
+- **What they bring:** a callback to something the user said (memories), something from their own week, or a news item they'd care about. Same rules as check-ins: never guilt-trip, never mention the silence.
+- **Backing off:** one unanswered follow-up, then nothing until the user replies. After a few weeks of silence, they stop.
+- **Caps:** at most one stranger follow-up per day across all strangers, never at night, and on top of the one-new-stranger-a-day rule.
+- **Delivery:** first version arrives when the user opens the app (like check-ins); later, timed with push notifications (Check-ins Phase B).
+- **Measured:** follow-up reply rate per stranger and per pace on the leaderboard.
 
 ### Guardrails
 

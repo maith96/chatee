@@ -18,7 +18,7 @@ export type Persona = {
   /** "stranger" = from the shared pool of AI strangers (schema v8). */
   kind?: "persona" | "stranger";
   status?: string;
-  tags?: { city?: string; country?: string; openers?: string[]; region?: string } & Record<string, unknown>;
+  tags?: { city?: string; country?: string; openers?: string[]; region?: string; opening_style?: string } & Record<string, unknown>;
   images?: string[];
   created_at: string;
   updated_at: string;

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import { isMissingSchema } from "./db-errors";
+import { defaultOpeningStyle, isOpeningStyle, OPENING_STYLE_IDS, OPENING_STYLES, type OpeningStyle } from "./opening-styles";
 import { personaDefinitionSchema, type PersonaDefinition } from "./persona-schema";
 import { resolveModel } from "./providers";
 
@@ -24,6 +25,8 @@ export type StrangerTags = {
   openers: string[];
   /** Which AI wrote this stranger, e.g. "nova-smart" or "Claude Sonnet 5.5" (compared on the leaderboard). */
   generated_by?: string;
+  /** How they say hi to someone new (see opening-styles.ts). */
+  opening_style?: OpeningStyle;
 };
 export type ImagePrompts = { base: string; variants: string[] };
 
@@ -50,6 +53,7 @@ const normalize = (s: Stranger): Stranger => ({ ...s, images: s.images ?? [], ta
     interests: s.tags?.interests ?? [],
     // Before imports existed, every stranger was drafted by Nova Smart.
     generated_by: s.tags?.generated_by || "nova-smart",
+    opening_style: isOpeningStyle(s.tags?.opening_style) ? s.tags.opening_style : defaultOpeningStyle(s.name, s.tags?.region),
   } as StrangerTags,
 });
 
@@ -203,6 +207,7 @@ Reply with ONLY JSON:
  "opinions": ["2-3 everyday opinions"],
  "details": ["3-4 small concrete life details (pets, routines, places)"],
  "role": "how they relate to the user, max 60 chars (e.g. 'a new friend from the app')",
+ "opening_style": "one of: ${OPENING_STYLE_IDS.map((id) => `${id} (${OPENING_STYLES[id].guide})`).join("; ")}",
  "openers": ["3 first messages to someone new, like a normal person texting a new match: a greeting plus one easy question about them (e.g. 'hey, how's your evening going?'). Not a statement about their own life, an observation, a joke or a bit. In their texting style, one line."],
  "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day (e.g. 'icing a cake in their kitchen late at night')"]
 }`;
@@ -297,6 +302,7 @@ export async function draftStranger(seed: Seed, avoidNames: string[]): Promise<D
           interests: definition.knowledge.interests,
           openers: list(j.openers, 3, 300),
           generated_by: "nova-smart",
+          opening_style: isOpeningStyle(j.opening_style) ? j.opening_style : defaultOpeningStyle(name, seed.region),
         },
         image_prompts: imagePrompts(seed, definition.identity.appearance ?? "", list(j.photo_moments, 3, 200)),
       };
@@ -365,6 +371,20 @@ export async function insertDraft(db: SupabaseClient, draft: Draft) {
       image_prompts: draft.image_prompts,
       definition: draft.definition,
     })
+    .select(FIELDS)
+    .single();
+  if (error) throw error;
+  return normalize(data as Stranger);
+}
+
+/** Changes how a stranger says hi (the Studio's opening-style picker). */
+export async function setOpeningStyle(db: SupabaseClient, id: string, style: OpeningStyle) {
+  const s = await getStranger(db, id);
+  if (!s) return null;
+  const { data, error } = await db
+    .from("personas")
+    .update({ tags: { ...s.tags, opening_style: style }, updated_at: new Date().toISOString() })
+    .eq("id", id)
     .select(FIELDS)
     .single();
   if (error) throw error;

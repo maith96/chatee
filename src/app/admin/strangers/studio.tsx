@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { OPENING_STYLE_IDS, OPENING_STYLES, type OpeningStyle } from "@/lib/opening-styles";
 import type { Stranger, StrangerStatus } from "@/lib/strangers";
 
 // Suggestions for "written by" (anything is accepted).
@@ -234,6 +235,11 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
       onGone(r.stranger.id); // it moves to another tab
       onNotice(`${s.name} → ${next}.`);
     });
+  const setStyle = (style: OpeningStyle) =>
+    act("style", async () => {
+      const r = await api<{ stranger: Stranger }>(`/${s.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ opening_style: style }) });
+      onChange(r.stranger);
+    });
   const upload = (slot: "main" | "gallery") => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -298,6 +304,14 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
           <p className="mt-1 text-xs text-muted">
             <b>Texts:</b> {c.length}, {c.lowercase ? "lowercase" : "normal caps"}, emoji {c.emoji}, slang {c.slang}/2, up to {c.bubbles} bubble{c.bubbles > 1 ? "s" : ""}
           </p>
+          <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <b>Says hi:</b>
+            <select value={t.opening_style ?? "warm"} disabled={!!busy} onChange={(e) => setStyle(e.target.value as OpeningStyle)}
+              className="rounded-lg border border-border bg-surface px-2 py-0.5 text-xs text-text" aria-label={`${s.name}'s opening style`}>
+              {OPENING_STYLE_IDS.map((id) => <option key={id} value={id}>{OPENING_STYLES[id].label}</option>)}
+            </select>
+            <span>{OPENING_STYLES[t.opening_style ?? "warm"].guide}</span>
+          </label>
           <details className="mt-2 text-sm">
             <summary className="cursor-pointer text-xs font-medium text-accent">How they text, and first messages</summary>
             <ul className="mt-2 space-y-1">
@@ -305,7 +319,7 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
                 <li key={i}><span className="text-xs text-muted">{e.situation}:</span> {Array.isArray(e.text) ? e.text.join(" / ") : e.text}</li>
               ))}
             </ul>
-            <p className="mt-2 text-xs font-medium">Opening messages</p>
+            <p className="mt-2 text-xs font-medium">Opening messages (ideas for review; their real first message is written fresh in their opening style)</p>
             <ul className="list-disc pl-5 text-sm">{t.openers.map((o, i) => <li key={i}>{o}</li>)}</ul>
           </details>
           {s.image_prompts && (
