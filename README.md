@@ -189,6 +189,18 @@ NVIDIA allows **40 requests per minute** per account. To stay under it:
 - **Rate limit:** set `RATE_LIMIT_PER_MINUTE` (default 15 messages per user per minute).
 - **Colors:** the CSS variables at the top of `src/app/globals.css`.
 
+## Legal pages, account deletion and safety
+
+- **Landing page:** signed-out visitors to `/` see `src/components/landing.tsx`; signed-in users get the chat app.
+- **Privacy policy** (`/privacy`) and **terms** (`/terms`): plain-English drafts written for Kenya's Data Protection Act,
+  2019. Keep them true to how the app works, and update `SITE.legalUpdated` in `src/lib/site.ts` when you change them.
+  Company name and contact email also live in `src/lib/site.ts` (or set `NEXT_PUBLIC_CONTACT_EMAIL`).
+- **Account deletion:** Settings → Delete my account (or `DELETE /api/v1/me`). It calls `delete_my_account()` in
+  `schema.sql`, and every user table cascades from `auth.users`. **Re-run `supabase/schema.sql` once** to add it.
+- **Crisis helplines:** `src/lib/crisis.ts`, Kenya first (Kenya Red Cross 1199, Befrienders Kenya). Re-check the
+  numbers every few months.
+- **Copyright:** all rights reserved, see [LICENSE](./LICENSE).
+
 ## Brand
 
 Name: **Sasamigo** (Swahili *sasa*, "hey", + *amigo*, "friend"). Tagline: **Friends who remember.** A Leinalok Labs product.

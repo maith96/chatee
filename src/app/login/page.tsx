@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useActionState, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Logo, Wordmark } from "@/components/logo";
 import { authenticate, signInWithGoogle, type AuthState } from "./actions";
@@ -13,10 +14,10 @@ export default function LoginPage() {
   return (
     <main className="min-h-dvh flex items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-3xl border border-border bg-panel p-8 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
+        <Link href="/" className="flex items-center gap-3 mb-6" aria-label="Sasamigo home">
           <Logo />
           <Wordmark className="text-2xl" />
-        </div>
+        </Link>
         <h1 className="text-lg font-semibold mb-1">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
         <p className="text-sm text-muted mb-6">Your chats are saved and synced across devices.</p>
 
@@ -55,6 +56,12 @@ export default function LoginPage() {
             {pending ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
           </button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted">
+          By continuing, you agree to our{" "}
+          <Link href="/terms" className="underline hover:text-text">Terms</Link> and{" "}
+          <Link href="/privacy" className="underline hover:text-text">Privacy policy</Link>. Everyone you chat with is an AI.
+        </p>
 
         <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
           className="mt-4 w-full text-sm text-muted hover:text-text">

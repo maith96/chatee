@@ -1,4 +1,4 @@
-import { authenticate, errors, json, preflight, readJson, route } from "@/lib/api";
+import { authenticate, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { isAdultConfirmed } from "@/lib/age";
 import { setPersonalize } from "@/lib/personalize";
 import { setStrangersEnabled, strangersEnabled } from "@/lib/stranger-contacts";
@@ -38,6 +38,19 @@ export const PATCH = route(async (req) => {
   if (typeof body.personalize === "boolean") await setPersonalize(db, user.id, body.personalize);
   if (typeof body.strangers === "boolean") await setStrangersEnabled(db, user.id, body.strangers);
   return json(req, { user: { id: user.id, personalize: body.personalize, strangers: body.strangers } });
+});
+
+// DELETE /api/v1/me  { "confirm": "DELETE" }
+// Permanently deletes the account and everything in it (chats, memories, settings). Can't be undone.
+export const DELETE = route(async (req) => {
+  const { db } = await authenticate(req, { requireAdult: false });
+  const body = await readJson(req);
+  if (body.confirm !== "DELETE") throw errors.badRequest('Send { "confirm": "DELETE" } to delete the account.');
+  const { error } = await db.rpc("delete_my_account");
+  if (error && (isMissingSchema(error) || error.code === "PGRST202")) throw new Error("Account deletion isn't set up yet: run supabase/schema.sql.");
+  if (error) throw error;
+  await db.auth.signOut().catch(() => {}); // the session belongs to a deleted user; clear its cookies
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 });
 
 export const OPTIONS = preflight;

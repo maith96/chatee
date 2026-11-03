@@ -1,0 +1,13 @@
+Copyright (c) 2026 Leinalok Labs. All rights reserved.
+
+This repository contains the source code, design, characters, artwork and brand of Sasamigo
+("the Software"), which are the property of Leinalok Labs.
+
+No permission is granted to copy, modify, distribute, sublicense, sell, or use the Software or any
+part of it (including the Sasamigo name, logo, characters and avatar images), in whole or in part,
+except with prior written permission from Leinalok Labs.
+
+Third-party components keep their own licences:
+- Open-source packages listed in package.json are used under their respective licences.
+- The Sasamigo wordmark is drawn from the Nunito and Montserrat typefaces, both licensed under the
+  SIL Open Font License 1.1.

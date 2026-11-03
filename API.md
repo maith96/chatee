@@ -160,7 +160,7 @@ while (true) {
 > or a streaming-capable fetch such as `expo/fetch` (Expo SDK 52+).
 
 **Safety:** if the message looks like the user may be in crisis, the JSON response includes
-`crisis_support` (helplines to show, e.g. 988 in the US, Samaritans 116 123 in the UK), and streamed responses
+`crisis_support` (helplines to show, Kenya first: Kenya Red Cross 1199, Befrienders Kenya; then 988 in the US, Samaritans 116 123 in the UK), and streamed responses
 include the header `X-Crisis-Support: 1`. Show these resources in your app whatever the persona replies.
 
 **Retries:** if a reply fails, send the same `content` again. The server reuses the
@@ -191,6 +191,10 @@ Resets the adjustments for this persona (it starts learning again from now) → 
 
 ### `PATCH /me`
 `{ "personalize": false }` switches style adaptation off for all personas (default on). `GET /me` returns the setting.
+
+### `DELETE /me`
+Body: `{ "confirm": "DELETE" }` → `204`. Permanently deletes the account and all its data (chats, memories,
+settings, the user's own personas). It can't be undone; ask the user to confirm first. Afterwards, sign out on the device.
 
 ### `GET /me/news?timezone=Africa/Nairobi`
 News settings and what's been learned:

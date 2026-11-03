@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ConfigError, supabaseEnv } from "./lib/env";
 
 // Refreshes the Supabase session cookie on every page request and
-// sends signed-out visitors to /login. The /api/v1 routes do their own auth.
+// sends signed-out visitors to /login (except public pages: landing, legal, login). The /api/v1 routes do their own auth.
 export async function proxy(request: NextRequest) {
   try {
     return await handle(request);
@@ -38,7 +38,8 @@ async function handle(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+  // The landing page (/) shows itself to signed-out visitors; the legal pages are always public.
+  const isPublic = path === "/" || path.startsWith("/login") || path.startsWith("/auth") || path === "/privacy" || path === "/terms";
 
   if (!signedIn && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));

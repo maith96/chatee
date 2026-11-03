@@ -807,5 +807,22 @@ $$;
 revoke all on function public.stranger_performance() from public, anon;
 grant execute on function public.stranger_performance() to authenticated;
 
+-- ---------------------------------------------------------------------------
+-- Account deletion: a signed-in user deletes their own account. Every table that holds their
+-- data references auth.users with "on delete cascade", so chats, messages, memories, feedback,
+-- relationships, settings and their own personas go with it. Safe to re-run.
+-- ---------------------------------------------------------------------------
+create or replace function public.delete_my_account()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not signed in.' using errcode = '42501';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
+
 -- To see the stats page, make your account an admin (run once, with your sign-in email):
 --   insert into public.admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

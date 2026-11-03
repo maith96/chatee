@@ -20,7 +20,7 @@ export function detectCrisis(text: string): boolean {
   return CRISIS_PATTERNS.some((p) => p.test(text));
 }
 
-// "I'm 16", "im 15 years old", "i am actually 17" … (Persona is 18+ only.)
+// "I'm 16", "im 15 years old", "i am actually 17" … (Sasamigo is 18+ only.)
 const MINOR_PATTERN =
   /\b(i'?m|i am|im)\s+(actually\s+|only\s+|just\s+)?(1[0-7]|[0-9])(\s*(yo|y\/o|years?\s+old)\b|(?=\s*($|[.!?,]|\s+(lol|haha|btw|tho|though|and|so|now|rn)\b)))/i;
 
@@ -28,7 +28,10 @@ export function detectMinor(text: string): boolean {
   return MINOR_PATTERN.test(text);
 }
 
+// Kenya first: it's our first market. Numbers checked November 2026; re-check them every few months.
 export const CRISIS_RESOURCES = [
+  { region: "Kenya", text: "Call Kenya Red Cross on 1199 (free, 24/7)", href: "tel:1199" },
+  { region: "Kenya", text: "Befrienders Kenya: 0722 178 177", href: "tel:+254722178177" },
   { region: "US", text: "Call or text 988 (Suicide & Crisis Lifeline)", href: "tel:988" },
   { region: "UK & Ireland", text: "Call Samaritans on 116 123 (free, 24/7)", href: "tel:116123" },
   { region: "Anywhere", text: "Find a free, confidential helpline near you", href: "https://findahelpline.com" },

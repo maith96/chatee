@@ -524,7 +524,7 @@ function SupportCard() {
       <p className="mt-1 text-muted">If you&apos;re struggling or not safe, please reach out to someone now:</p>
       <ul className="mt-2 space-y-1">
         {CRISIS_RESOURCES.map((r) => (
-          <li key={r.region}>
+          <li key={r.href}>
             <span className="text-muted">{r.region}:</span>{" "}
             <a href={r.href} className="font-medium text-accent-ink underline" target={r.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
               {r.text}
@@ -532,7 +532,7 @@ function SupportCard() {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-muted">If you&apos;re in immediate danger, call your local emergency number.</p>
+      <p className="mt-2 text-xs text-muted">If you&apos;re in immediate danger, call your local emergency number (999 or 112 in Kenya).</p>
     </div>
   );
 }

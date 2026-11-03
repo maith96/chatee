@@ -26,6 +26,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [personalize, setPersonalize] = useState<boolean | null>(null);
   const [strangers, setStrangers] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/v1/me/news?timezone=${encodeURIComponent(timezone())}`)
@@ -66,6 +68,21 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   async function savePersonalize(on: boolean) {
     setPersonalize(on);
     await fetch("/api/v1/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ personalize: on }) });
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    setError(null);
+    const res = await fetch("/api/v1/me", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "DELETE" }) });
+    if (res.ok) {
+      // A full page load on purpose: it drops all in-memory state of the deleted account.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/?deleted=1";
+      return;
+    }
+    const body = await res.json().catch(() => null);
+    setError(body?.error?.message ?? "Couldn't delete your account. Please try again.");
+    setDeleting(false);
   }
 
   const chip = (active: boolean) =>
@@ -166,6 +183,28 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-xs text-muted">Like shorter replies or fewer emoji, from your 👍/👎 and how you text. See and reset it per persona in 🧠 Memory.</p>
           </section>
         )}
+        <section aria-label="Your account" className="mt-8 border-t border-border pt-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">Your account</h3>
+          <p className="text-sm">
+            <a href="/privacy" target="_blank" className="text-accent-ink hover:underline">Privacy policy</a>
+            <span className="text-muted"> · </span>
+            <a href="/terms" target="_blank" className="text-accent-ink hover:underline">Terms</a>
+          </p>
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-red-600 dark:text-red-400">Delete my account</summary>
+            <p className="mt-2 text-xs text-muted">
+              This permanently deletes your account, all your chats, what your Sasamigo friends remember about you, and your settings.
+              It can&apos;t be undone.
+            </p>
+            <label className="mt-3 block text-xs text-muted" htmlFor="confirm-delete">Type DELETE to confirm</label>
+            <input id="confirm-delete" value={confirmDelete} onChange={(e) => setConfirmDelete(e.target.value)} autoComplete="off"
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
+            <button onClick={deleteAccount} disabled={confirmDelete.trim() !== "DELETE" || deleting}
+              className="mt-3 w-full rounded-xl bg-red-700 py-2.5 text-sm font-medium text-white disabled:opacity-40">
+              {deleting ? "Deleting…" : "Delete my account forever"}
+            </button>
+          </details>
+        </section>
       </aside>
     </div>
   );
