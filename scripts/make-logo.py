@@ -48,7 +48,7 @@ nunito = Face(os.path.join(FONTS, "Nunito.ttf"))
 mont = Face(os.path.join(FONTS, "Montserrat.ttf"))
 
 # ---- the mark, drawn in a 200 x 200 box ----
-BUBBLE = "M60 166.5A92 86 0 1 0 38.5 150.5L23 182Q20 188.5 26.5 186L60 166.5Z"
+BUBBLE = "M74.5 172.8A92 86 0 1 0 28.8 138.8Q38.5 150.5 34.1 159.5L24.5 179Q20 188.5 29.5 185L51.4 171.5Q60 166.5 74.5 172.8Z"
 DOTS = [(71, 84), (106, 84), (141, 84)]
 SMILE = "M80 117C89 133 123 133 132 117"
 
