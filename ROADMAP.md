@@ -1,4 +1,4 @@
-# Persona roadmap
+# Sasamigo roadmap
 
 Ideas and decisions so far, so nothing gets lost. ✅ = shipped, 🔜 = next, 💡 = later.
 
@@ -116,3 +116,4 @@ A WhatsApp-like experience where AI "strangers" DM the user to get to know them 
 | 2026-11 | Experiments change style or model only, never romance, check-ins or safety |
 | 2026-11 | Strangers: shared pool, about 20 hand-made images a day, not flirty, max 1 new stranger a day, stop after 2 ignored |
 | 2026-11 | News: global + regional, learned from engagement, user can override |
+| 2026-11 | Brand: **Sasamigo** by Leinalok Labs, "Friends who remember", Sasa Orange palette; Kenya / East Africa first; friendship-led marketing |

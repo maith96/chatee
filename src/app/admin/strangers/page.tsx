@@ -25,8 +25,8 @@ async function Gate() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex flex-wrap gap-4 text-sm">
-        <Link href="/" className="text-accent hover:underline">← Back to chats</Link>
-        <Link href="/admin/stats" className="text-accent hover:underline">Stats</Link>
+        <Link href="/" className="text-accent-ink hover:underline">← Back to chats</Link>
+        <Link href="/admin/stats" className="text-accent-ink hover:underline">Stats</Link>
       </div>
       <h1 className="mt-2 text-2xl font-semibold">Stranger Studio</h1>
       <p className="mt-1 max-w-3xl text-sm text-muted">

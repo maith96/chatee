@@ -1,42 +1,46 @@
 @import "tailwindcss";
 
+/* Sasamigo palette. --brand is the logo orange; --accent is a deeper orange that keeps white
+   text readable (4.9:1); --accent-ink is the accent for text on the page background. */
 :root {
-  --bg: #fff8f0;
-  --panel: #fffdf9;
+  --bg: #fbf6ee;
+  --panel: #fffcf7;
   --surface: #ffffff;
-  --border: #f1e6da;
-  --text: #2a1f2d;
-  --muted: #7a6b80;
-  --accent: #ff4f87;
-  --accent-soft: #ffe3ec;
+  --border: #ede3d6;
+  --text: #12302f;
+  --muted: #5c6e6c;
+  --brand: #e8642c;
+  --accent: #c2491a;
+  --accent-ink: #b03f15;
+  --accent-soft: #fce5d8;
   --accent-text: #ffffff;
-  --code-bg: #2a1f2d;
-  --code-text: #fbeff3;
+  --code-bg: #12302f;
+  --code-text: #fbf6ee;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #17121a;
-    --panel: #1d1720;
-    --surface: #241d28;
-    --border: #352b3a;
-    --text: #f4ecf6;
-    --muted: #a898ae;
-    --accent: #ff5c90;
-    --accent-soft: #3a2230;
-    --code-bg: #0f0b11;
+    --bg: #0f1c1c;
+    --panel: #132323;
+    --surface: #182a2a;
+    --border: #26393a;
+    --text: #eef4f2;
+    --muted: #9db3b0;
+    --accent-ink: #f28a50;
+    --accent-soft: #3a2418;
+    --code-bg: #091212;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #17121a;
-  --panel: #1d1720;
-  --surface: #241d28;
-  --border: #352b3a;
-  --text: #f4ecf6;
-  --muted: #a898ae;
-  --accent: #ff5c90;
-  --accent-soft: #3a2230;
-  --code-bg: #0f0b11;
+  --bg: #0f1c1c;
+  --panel: #132323;
+  --surface: #182a2a;
+  --border: #26393a;
+  --text: #eef4f2;
+  --muted: #9db3b0;
+  --accent-ink: #f28a50;
+  --accent-soft: #3a2418;
+  --code-bg: #091212;
 }
 
 @theme inline {
@@ -46,7 +50,9 @@
   --color-border: var(--border);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  --color-brand: var(--brand);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
 }
 

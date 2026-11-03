@@ -11,7 +11,7 @@ import { REGION_LABELS, TOPIC_LABELS, isRegion, isTopic } from "@/lib/news-sourc
 import { RefreshNews } from "./refresh-news";
 import { getLeaderboard, MIN_USERS } from "@/lib/stranger-leaderboard";
 
-export const metadata = { title: "Persona stats" };
+export const metadata = { title: "Sasamigo stats" };
 
 const RANGES = [7, 30, 90];
 
@@ -42,10 +42,10 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <div className="flex gap-4 text-sm">
-            <Link href="/" className="text-accent hover:underline">← Back to chats</Link>
-            <Link href="/admin/strangers" className="text-accent hover:underline">Stranger Studio</Link>
+            <Link href="/" className="text-accent-ink hover:underline">← Back to chats</Link>
+            <Link href="/admin/strangers" className="text-accent-ink hover:underline">Stranger Studio</Link>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold">Persona stats</h1>
+          <h1 className="mt-2 text-2xl font-semibold">Sasamigo stats</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             Counts and averages only, from reply metadata (no message text). Messages around a crisis are left out.
             Groups with fewer than 5 users show counts but no metrics.
@@ -100,7 +100,7 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
           <p className="mt-1 max-w-3xl text-sm text-muted">
             Score = how often people answer the first message (40%), reach 10+ messages (30%) and come back on a later day (30%); blocks count
             as 0. Smoothed, with a 95% range. New strangers are matched to users 20% of the time so they collect data. Rates show once {MIN_USERS}+ people
-            have met them. Manage them in the <Link href="/admin/strangers" className="text-accent hover:underline">Stranger Studio</Link>.
+            have met them. Manage them in the <Link href="/admin/strangers" className="text-accent-ink hover:underline">Stranger Studio</Link>.
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
             <Link href={`?${new URLSearchParams({ days: String(days), kind })}`}

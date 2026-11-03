@@ -1,6 +1,6 @@
-# Persona API (v1)
+# Sasamigo API (v1)
 
-A REST API for using Persona from any other app: mobile (React Native, Flutter, Swift, Kotlin), desktop, or another website.
+A REST API for using Sasamigo from any other app: mobile (React Native, Flutter, Swift, Kotlin), desktop, or another website.
 The website uses this same API, so anything the site can do, your app can do.
 
 Base URL: `https://<your-app>.vercel.app/api/v1`
@@ -61,7 +61,7 @@ Only models whose provider is configured on the server are listed.
 ```
 
 ### `POST /me/age`
-Persona is 18+ only. Every other endpoint (except `/me` and `/models`) returns `403 age_confirmation_required`
+Sasamigo is 18+ only. Every other endpoint (except `/me` and `/models`) returns `403 age_confirmation_required`
 until the user confirms. Body: `{ "birthdate": "YYYY-MM-DD" }` → `{ "adult_confirmed": true }`, or `400` if under 18.
 Only the confirmation is stored, never the birthdate.
 

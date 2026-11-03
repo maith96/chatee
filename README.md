@@ -1,6 +1,8 @@
-# Persona
+# Sasamigo
 
-An AI chat app built with **Next.js + Vercel AI SDK + NVIDIA NIM and/or Gemini + Supabase**, hosted on Vercel.
+<img src="public/brand/sasamigo-logo.svg" alt="Sasamigo: Friends who remember" width="420">
+
+**Friends who remember.** Sasamigo, by **Leinalok Labs**, is an AI chat app built with **Next.js + Vercel AI SDK + NVIDIA NIM and/or Gemini + Supabase**, hosted on Vercel.
 It includes a **public REST API** (`/api/v1`) so a later app (mobile, desktop, another site) can use the same accounts and chats. See [API.md](./API.md).
 
 **Features:** streaming replies · Markdown and code blocks with copy buttons · chats saved per user · auto-titled, renameable and deletable chats ·
@@ -186,6 +188,18 @@ NVIDIA allows **40 requests per minute** per account. To stay under it:
   A model only shows up if its provider's key is set. The default is Nova Smart (falls back to Gemini if there's no NVIDIA key).
 - **Rate limit:** set `RATE_LIMIT_PER_MINUTE` (default 15 messages per user per minute).
 - **Colors:** the CSS variables at the top of `src/app/globals.css`.
+
+## Brand
+
+Name: **Sasamigo** (Swahili *sasa*, "hey", + *amigo*, "friend"). Tagline: **Friends who remember.** A Leinalok Labs product.
+
+- **Logo files:** `public/brand/` (horizontal, stacked, on-dark, black, white, mark only, app icons as SVG and PNG).
+  Regenerate them with `scripts/make-logo.py` (instructions at the top of the file). The wordmark is drawn as outlines
+  from Nunito Black and Montserrat Bold (both SIL Open Font License).
+- **Colors:** Sasa Orange `#E8642C` (logo, `--brand`), deeper orange `#C2491A` for buttons with white text (`--accent`),
+  Deep Teal `#0F3D3E` / `#12302F` for text, Cream `#FBF6EE` background, Saffron `#F2B233` for small highlights only.
+- **In the app:** `src/components/logo.tsx` (`Logo`, `Wordmark`), `src/app/icon.svg`, `src/app/apple-icon.png`,
+  `src/app/favicon.ico`, `src/app/manifest.ts`.
 
 ## Free-tier notes
 

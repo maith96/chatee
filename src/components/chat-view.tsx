@@ -485,12 +485,12 @@ function Rating({ replyId }: { replyId: string }) {
     <>
       <span className="ml-2 inline-flex items-center gap-0.5 align-middle">
         <button type="button" aria-label="Good reply" aria-pressed={current?.rating === 1}
-          className={`${btn} ${current?.rating === 1 ? "text-accent" : ""}`}
+          className={`${btn} ${current?.rating === 1 ? "text-accent-ink" : ""}`}
           onClick={() => { setAsking(false); ctx.rate(replyId, current?.rating === 1 ? null : 1); }}>
           <Thumb active={current?.rating === 1} />
         </button>
         <button type="button" aria-label="Bad reply" aria-pressed={current?.rating === -1}
-          className={`${btn} ${current?.rating === -1 ? "text-accent" : ""}`}
+          className={`${btn} ${current?.rating === -1 ? "text-accent-ink" : ""}`}
           onClick={() => {
             const undo = current?.rating === -1;
             setAsking(!undo);
@@ -504,7 +504,7 @@ function Rating({ replyId }: { replyId: string }) {
           {FEEDBACK_REASONS.map((r) => (
             <button key={r} type="button" aria-pressed={current.reason === r}
               onClick={() => { ctx.rate(replyId, -1, r); setAsking(false); }}
-              className={`rounded-full border px-2.5 py-0.5 text-xs ${current.reason === r ? "border-accent text-accent" : "border-border hover:border-accent"}`}>
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${current.reason === r ? "border-accent text-accent-ink" : "border-border hover:border-accent"}`}>
               {REASON_LABELS[r]}
             </button>
           ))}
@@ -526,7 +526,7 @@ function SupportCard() {
         {CRISIS_RESOURCES.map((r) => (
           <li key={r.region}>
             <span className="text-muted">{r.region}:</span>{" "}
-            <a href={r.href} className="font-medium text-accent underline" target={r.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
+            <a href={r.href} className="font-medium text-accent-ink underline" target={r.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
               {r.text}
             </a>
           </li>

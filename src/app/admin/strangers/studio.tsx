@@ -299,7 +299,7 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
             <b>Texts:</b> {c.length}, {c.lowercase ? "lowercase" : "normal caps"}, emoji {c.emoji}, slang {c.slang}/2, up to {c.bubbles} bubble{c.bubbles > 1 ? "s" : ""}
           </p>
           <details className="mt-2 text-sm">
-            <summary className="cursor-pointer text-xs font-medium text-accent">How they text, and first messages</summary>
+            <summary className="cursor-pointer text-xs font-medium text-accent-ink">How they text, and first messages</summary>
             <ul className="mt-2 space-y-1">
               {c.examples.map((e, i) => (
                 <li key={i}><span className="text-xs text-muted">{e.situation}:</span> {Array.isArray(e.text) ? e.text.join(" / ") : e.text}</li>

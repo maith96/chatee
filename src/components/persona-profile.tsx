@@ -28,9 +28,9 @@ export function PersonaProfile({ persona, onClose }: { persona: PersonaSummary; 
         {persona.tagline && <p className="mt-1 text-muted">{persona.tagline}</p>}
         {facts && <p className="mt-1 text-sm text-muted">{facts}</p>}
         <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
-          {persona.is_stranger && <span className="rounded-full bg-accent-soft px-2.5 py-1 font-semibold text-accent">AI stranger</span>}
-          {persona.role && <span className="rounded-full bg-accent-soft px-2.5 py-1 capitalize text-accent">{persona.role}</span>}
-          {persona.is_romantic && <span className="rounded-full bg-accent-soft px-2.5 py-1 text-accent">romance</span>}
+          {persona.is_stranger && <span className="rounded-full bg-accent-soft px-2.5 py-1 font-semibold text-accent-ink">AI stranger</span>}
+          {persona.role && <span className="rounded-full bg-accent-soft px-2.5 py-1 capitalize text-accent-ink">{persona.role}</span>}
+          {persona.is_romantic && <span className="rounded-full bg-accent-soft px-2.5 py-1 text-accent-ink">romance</span>}
         </div>
         {persona.bio && <p className="mt-4 text-left text-sm">{persona.bio}</p>}
         {photos.length > 1 && (

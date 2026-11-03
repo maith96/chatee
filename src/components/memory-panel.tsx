@@ -127,7 +127,7 @@ export function MemoryPanel({ persona, onClose }: { persona: PersonaSummary; onC
                     Adapt to my style
                   </label>
                   {style.personalize && style.adjustments.length > 0 && (
-                    <button onClick={resetStyle} className="text-accent hover:underline">Reset</button>
+                    <button onClick={resetStyle} className="text-accent-ink hover:underline">Reset</button>
                   )}
                 </div>
                 {!style.personalize && <p className="mt-1 text-xs text-muted">Applies to all personas.</p>}

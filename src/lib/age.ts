@@ -23,7 +23,7 @@ export type AgeCheck = { ok: true } | { ok: false; message: string };
 export function checkBirthdate(birthdate: string): AgeCheck {
   const age = ageFromBirthdate(birthdate);
   if (age === null) return { ok: false, message: "Enter a valid date of birth." };
-  if (age < MIN_AGE) return { ok: false, message: "Sorry, you must be 18 or older to use Persona." };
+  if (age < MIN_AGE) return { ok: false, message: "Sorry, you must be 18 or older to use Sasamigo." };
   return { ok: true };
 }
 

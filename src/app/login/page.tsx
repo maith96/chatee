@@ -2,7 +2,7 @@
 
 import { Suspense, useActionState, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Logo } from "@/components/logo";
+import { Logo, Wordmark } from "@/components/logo";
 import { authenticate, signInWithGoogle, type AuthState } from "./actions";
 
 export default function LoginPage() {
@@ -15,7 +15,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-3xl border border-border bg-panel p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
           <Logo />
-          <span className="text-xl font-semibold">Persona</span>
+          <Wordmark className="text-2xl" />
         </div>
         <h1 className="text-lg font-semibold mb-1">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
         <p className="text-sm text-muted mb-6">Your chats are saved and synced across devices.</p>

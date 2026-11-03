@@ -8,7 +8,7 @@ import type { PersonaSummary } from "@/lib/personas";
 import type { ContactView } from "@/lib/stranger-contacts";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "./avatar";
-import { Logo } from "./logo";
+import { Logo, Wordmark } from "./logo";
 import { MemoryPanel } from "./memory-panel";
 import { SettingsPanel } from "./settings-panel";
 import { ChatView } from "./chat-view";
@@ -37,7 +37,7 @@ const timezone = () => {
 
 /** Shown next to every AI stranger, so nobody mistakes them for a real person. */
 function AiBadge() {
-  return <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">AI</span>;
+  return <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-ink">AI</span>;
 }
 
 function timeAgo(iso: string) {
@@ -212,7 +212,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
         }`}>
         <div className="mb-6 flex items-center gap-3">
           <Logo />
-          <span className="text-lg font-semibold">Persona</span>
+          <Wordmark className="text-xl" />
         </div>
 
         <button onClick={newChat}
@@ -280,10 +280,10 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
           <div className="mt-1 truncate text-muted">{email}</div>
           <div className="mt-2 flex gap-4">
             <form action={signOut}>
-              <button className="text-accent hover:underline">Sign out</button>
+              <button className="text-accent-ink hover:underline">Sign out</button>
             </form>
-            <button onClick={() => setShowSettings(true)} className="text-accent hover:underline">Settings</button>
-            {admin && <a href="/admin/stats" className="text-accent hover:underline">Stats</a>}
+            <button onClick={() => setShowSettings(true)} className="text-accent-ink hover:underline">Settings</button>
+            {admin && <a href="/admin/stats" className="text-accent-ink hover:underline">Stats</a>}
           </div>
           <p className="mt-3 text-xs text-muted">
             To improve personas we measure reply style and engagement (like reply length and thumbs up/down), not what you say, and try small style variations.
@@ -378,7 +378,7 @@ function PersonaPicker({ personas, onChoose }: { personas: PersonaSummary[]; onC
               <div className="min-w-0 pt-1">
                 <div className="flex items-center gap-2">
                   <span className="text-lg font-semibold">{p.name}</span>
-                  {p.is_romantic && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">romance</span>}
+                  {p.is_romantic && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent-ink">romance</span>}
                 </div>
                 {p.tagline && <div className="text-sm text-muted">{p.tagline}</div>}
                 {p.bio && <p className="mt-2 line-clamp-3 text-sm">{p.bio}</p>}

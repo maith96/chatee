@@ -136,7 +136,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                             </li>
                           ))}
                       </ul>
-                      <button onClick={() => save({ reset_learning: true })} className="mt-2 text-sm text-accent hover:underline">Reset what&apos;s been learned</button>
+                      <button onClick={() => save({ reset_learning: true })} className="mt-2 text-sm text-accent-ink hover:underline">Reset what&apos;s been learned</button>
                     </>
                   )}
                 </>
