@@ -23,7 +23,7 @@ import { loadNews, mentionedItems, recordMentions } from "./news";
 import { partOfDay } from "./prompt-builder";
 import { loadStyle } from "./personalize";
 import { resolveModel } from "./providers";
-import { assistantRows, newReplyId } from "./reply-stats";
+import { assistantRows, countWords, newReplyId } from "./reply-stats";
 
 function safeZone(tz?: string) {
   try {
@@ -43,11 +43,12 @@ function describeAway(hours: number) {
 export async function maybeCheckIn(
   db: SupabaseClient,
   conversation: Conversation,
-  opts: { timezone?: string; now?: number } = {},
+  /** `force`: check in after this many hours even if the persona has check-ins off (stranger follow-ups). */
+  opts: { timezone?: string; now?: number; force?: { afterHours: number } } = {},
 ): Promise<Message[]> {
   if (!conversation.persona_id) return [];
   const { persona, styleNote, label } = personaForChat(await getPersona(db, conversation.persona_id), conversation);
-  const settings = persona?.definition.relationship.checkIn;
+  const settings = opts.force ? { enabled: true, afterHours: opts.force.afterHours, style: undefined } : persona?.definition.relationship.checkIn;
   if (!persona || !settings?.enabled) return [];
 
   const history = await listMessages(db, conversation.id);
@@ -84,16 +85,22 @@ Write it as if you're simply texting them first. Never mention the app, the chat
 
   const { languageModel, providerOptions, servedBy } = resolveModel(conversation.model);
   const startedAt = Date.now();
-  const { text } = await generateText({
-    model: languageModel,
-    providerOptions,
-    instructions,
-    // The model needs a user turn to respond to; this cue is never saved or shown.
-    messages: [
-      ...toModelMessages(history.slice(-30)),
-      { role: "user", content: "(Send your check-in message now.)" },
-    ],
-  });
+  const generate = async () =>
+    (
+      await generateText({
+        model: languageModel,
+        providerOptions,
+        instructions,
+        // The model needs a user turn to respond to; this cue is never saved or shown.
+        messages: [
+          ...toModelMessages(history.slice(-30)),
+          { role: "user", content: "(Send your check-in message now.)" },
+        ],
+      })
+    ).text;
+  let text = await generate();
+  // A check-in of one or two words ("wait what") makes no sense out of the blue: try once more.
+  if (countWords(text) < 3) text = await generate();
 
   const c = persona.definition.communication;
   const bubbles = splitBubbles(text, { paragraphs: c.bubbles > 1, max: c.bubbles });

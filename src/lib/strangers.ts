@@ -4,7 +4,17 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import { isMissingSchema } from "./db-errors";
-import { defaultOpeningStyle, isOpeningStyle, OPENING_STYLE_IDS, OPENING_STYLES, type OpeningStyle } from "./opening-styles";
+import {
+  defaultFollowUpPace,
+  defaultOpeningStyle,
+  FOLLOW_UP_PACE_IDS,
+  isFollowUpPace,
+  isOpeningStyle,
+  OPENING_STYLE_IDS,
+  OPENING_STYLES,
+  type FollowUpPace,
+  type OpeningStyle,
+} from "./opening-styles";
 import { personaDefinitionSchema, type PersonaDefinition } from "./persona-schema";
 import { resolveModel } from "./providers";
 
@@ -27,6 +37,8 @@ export type StrangerTags = {
   generated_by?: string;
   /** How they say hi to someone new (see opening-styles.ts). */
   opening_style?: OpeningStyle;
+  /** How soon they text again when the chat goes quiet. */
+  follow_up_pace?: FollowUpPace;
 };
 export type ImagePrompts = { base: string; variants: string[] };
 
@@ -54,6 +66,7 @@ const normalize = (s: Stranger): Stranger => ({ ...s, images: s.images ?? [], ta
     // Before imports existed, every stranger was drafted by Nova Smart.
     generated_by: s.tags?.generated_by || "nova-smart",
     opening_style: isOpeningStyle(s.tags?.opening_style) ? s.tags.opening_style : defaultOpeningStyle(s.name, s.tags?.region),
+    follow_up_pace: isFollowUpPace(s.tags?.follow_up_pace) ? s.tags.follow_up_pace : defaultFollowUpPace(s.definition?.personality?.sliders),
   } as StrangerTags,
 });
 
@@ -208,6 +221,7 @@ Reply with ONLY JSON:
  "details": ["3-4 small concrete life details (pets, routines, places)"],
  "role": "how they relate to the user, max 60 chars (e.g. 'a new friend from the app')",
  "opening_style": "one of: ${OPENING_STYLE_IDS.map((id) => `${id} (${OPENING_STYLES[id].guide})`).join("; ")}",
+ "follow_up_pace": "${FOLLOW_UP_PACE_IDS.join(" | ")}: how soon they'd text again when a chat goes quiet (eager about a day, steady 2-3 days, reserved 4-5 days), fitting their personality",
  "openers": ["3 first messages to someone new, like a normal person texting a new match: a greeting plus one easy question about them (e.g. 'hey, how's your evening going?'). Not a statement about their own life, an observation, a joke or a bit. In their texting style, one line."],
  "photo_moments": ["2 everyday moments from their life to photograph, each with a clear place and time of day (e.g. 'icing a cake in their kitchen late at night')"]
 }`;
@@ -303,6 +317,7 @@ export async function draftStranger(seed: Seed, avoidNames: string[]): Promise<D
           openers: list(j.openers, 3, 300),
           generated_by: "nova-smart",
           opening_style: isOpeningStyle(j.opening_style) ? j.opening_style : defaultOpeningStyle(name, seed.region),
+          follow_up_pace: isFollowUpPace(j.follow_up_pace) ? j.follow_up_pace : defaultFollowUpPace(definition.personality.sliders),
         },
         image_prompts: imagePrompts(seed, definition.identity.appearance ?? "", list(j.photo_moments, 3, 200)),
       };
@@ -377,13 +392,13 @@ export async function insertDraft(db: SupabaseClient, draft: Draft) {
   return normalize(data as Stranger);
 }
 
-/** Changes how a stranger says hi (the Studio's opening-style picker). */
-export async function setOpeningStyle(db: SupabaseClient, id: string, style: OpeningStyle) {
+/** Changes how a stranger says hi or how soon they follow up (the Studio's pickers). */
+export async function setStrangerTags(db: SupabaseClient, id: string, patch: Partial<Pick<StrangerTags, "opening_style" | "follow_up_pace">>) {
   const s = await getStranger(db, id);
   if (!s) return null;
   const { data, error } = await db
     .from("personas")
-    .update({ tags: { ...s.tags, opening_style: style }, updated_at: new Date().toISOString() })
+    .update({ tags: { ...s.tags, ...patch }, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select(FIELDS)
     .single();

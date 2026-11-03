@@ -9,6 +9,7 @@ import { rate, rates, verdict, type ExperimentRow, type Rate } from "@/lib/exper
 import { createClient } from "@/lib/supabase/server";
 import { REGION_LABELS, TOPIC_LABELS, isRegion, isTopic } from "@/lib/news-sources";
 import { RefreshNews } from "./refresh-news";
+import { isOpeningStyle, OPENING_STYLES } from "@/lib/opening-styles";
 import { getLeaderboard, MIN_USERS } from "@/lib/stranger-leaderboard";
 
 export const metadata = { title: "Sasamigo stats" };
@@ -143,12 +144,30 @@ async function Stats({ searchParams }: { searchParams: Promise<{ days?: string; 
                 empty=""
                 head={["Written by", "Strangers", "People", "Score"]}
                 rows={strangers.generators.map((g) => [
-                  g.generated_by,
+                  g.value,
                   g.strangers,
                   g.users,
                   g.score === null ? "–" : `${Math.round(g.score * 100)} (${Math.round((g.low ?? 0) * 100)}–${Math.round((g.high ?? 0) * 100)})`,
                 ])}
                 dim={strangers.generators.map((g) => g.score === null)}
+              />
+            </>
+          )}
+          {strangers.openingStyles.length > 0 && (
+            <>
+              <h3 className="mt-6 text-sm font-semibold">By opening style</h3>
+              <p className="mt-1 text-xs text-muted">How each way of saying hi does. When someone ignores strangers, the next one they get opens in a style they haven&apos;t ignored yet.</p>
+              <Table
+                empty=""
+                head={["Says hi", "Strangers", "People", "Answered first message", "Score"]}
+                rows={strangers.openingStyles.map((g) => [
+                  isOpeningStyle(g.value) ? OPENING_STYLES[g.value].label : g.value,
+                  g.strangers,
+                  g.users,
+                  pct(g.answered),
+                  g.score === null ? "–" : `${Math.round(g.score * 100)} (${Math.round((g.low ?? 0) * 100)}–${Math.round((g.high ?? 0) * 100)})`,
+                ])}
+                dim={strangers.openingStyles.map((g) => g.score === null)}
               />
             </>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { OPENING_STYLE_IDS, OPENING_STYLES, type OpeningStyle } from "@/lib/opening-styles";
+import { FOLLOW_UP_PACE_IDS, FOLLOW_UP_PACES, OPENING_STYLE_IDS, OPENING_STYLES, type FollowUpPace, type OpeningStyle } from "@/lib/opening-styles";
 import type { Stranger, StrangerStatus } from "@/lib/strangers";
 
 // Suggestions for "written by" (anything is accepted).
@@ -235,9 +235,9 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
       onGone(r.stranger.id); // it moves to another tab
       onNotice(`${s.name} → ${next}.`);
     });
-  const setStyle = (style: OpeningStyle) =>
+  const setTags = (patch: { opening_style?: OpeningStyle; follow_up_pace?: FollowUpPace }) =>
     act("style", async () => {
-      const r = await api<{ stranger: Stranger }>(`/${s.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ opening_style: style }) });
+      const r = await api<{ stranger: Stranger }>(`/${s.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
       onChange(r.stranger);
     });
   const upload = (slot: "main" | "gallery") => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -306,11 +306,19 @@ function StrangerCard({ s, onChange, onGone, onNotice }: { s: Stranger; onChange
           </p>
           <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
             <b>Says hi:</b>
-            <select value={t.opening_style ?? "warm"} disabled={!!busy} onChange={(e) => setStyle(e.target.value as OpeningStyle)}
+            <select value={t.opening_style ?? "warm"} disabled={!!busy} onChange={(e) => setTags({ opening_style: e.target.value as OpeningStyle })}
               className="rounded-lg border border-border bg-surface px-2 py-0.5 text-xs text-text" aria-label={`${s.name}'s opening style`}>
               {OPENING_STYLE_IDS.map((id) => <option key={id} value={id}>{OPENING_STYLES[id].label}</option>)}
             </select>
             <span>{OPENING_STYLES[t.opening_style ?? "warm"].guide}</span>
+          </label>
+          <label className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <b>Follows up:</b>
+            <select value={t.follow_up_pace ?? "steady"} disabled={!!busy} onChange={(e) => setTags({ follow_up_pace: e.target.value as FollowUpPace })}
+              className="rounded-lg border border-border bg-surface px-2 py-0.5 text-xs text-text" aria-label={`${s.name}'s follow-up pace`}>
+              {FOLLOW_UP_PACE_IDS.map((id) => <option key={id} value={id}>{FOLLOW_UP_PACES[id].label}</option>)}
+            </select>
+            <span>when a chat goes quiet (once, then waits for a reply)</span>
           </label>
           <details className="mt-2 text-sm">
             <summary className="cursor-pointer text-xs font-medium text-accent-ink">How they text, and first messages</summary>

@@ -1,7 +1,7 @@
 import { assertUuid, corsHeaders, errors, json, preflight, readJson, route } from "@/lib/api";
 import { authenticateAdmin } from "@/lib/admin";
-import { isOpeningStyle, OPENING_STYLE_IDS } from "@/lib/opening-styles";
-import { deleteStranger, getStranger, setOpeningStyle, setStatus, STRANGER_STATUSES, type StrangerStatus } from "@/lib/strangers";
+import { FOLLOW_UP_PACE_IDS, isFollowUpPace, isOpeningStyle, OPENING_STYLE_IDS } from "@/lib/opening-styles";
+import { deleteStranger, getStranger, setStatus, setStrangerTags, STRANGER_STATUSES, type StrangerStatus } from "@/lib/strangers";
 
 type Params = { id: string };
 
@@ -14,17 +14,21 @@ export const GET = route<Params>(async (req, { params }) => {
   return json(req, { stranger });
 });
 
-// PATCH /api/v1/admin/strangers/{id}  { "status"?: "trial" | "active" | "retired" | "draft", "opening_style"?: "shy" | ... }
+// PATCH /api/v1/admin/strangers/{id}  { "status"?: "trial" | "active" | "retired" | "draft", "opening_style"?: "shy" | ..., "follow_up_pace"?: "eager" | "steady" | "reserved" }
 export const PATCH = route<Params>(async (req, { params }) => {
   const { id } = await params;
   assertUuid(id, "Stranger");
   const { db } = await authenticateAdmin(req);
   const body = await readJson(req);
-  if (body.status === undefined && body.opening_style === undefined) throw errors.badRequest("Send 'status' or 'opening_style'.");
+  if (body.status === undefined && body.opening_style === undefined && body.follow_up_pace === undefined) throw errors.badRequest("Send 'status', 'opening_style' or 'follow_up_pace'.");
   let stranger;
-  if (body.opening_style !== undefined) {
-    if (!isOpeningStyle(body.opening_style)) throw errors.badRequest(`'opening_style' must be one of: ${OPENING_STYLE_IDS.join(", ")}.`);
-    stranger = await setOpeningStyle(db, id, body.opening_style);
+  if (body.opening_style !== undefined || body.follow_up_pace !== undefined) {
+    if (body.opening_style !== undefined && !isOpeningStyle(body.opening_style)) throw errors.badRequest(`'opening_style' must be one of: ${OPENING_STYLE_IDS.join(", ")}.`);
+    if (body.follow_up_pace !== undefined && !isFollowUpPace(body.follow_up_pace)) throw errors.badRequest(`'follow_up_pace' must be one of: ${FOLLOW_UP_PACE_IDS.join(", ")}.`);
+    stranger = await setStrangerTags(db, id, {
+      ...(body.opening_style !== undefined ? { opening_style: body.opening_style } : {}),
+      ...(body.follow_up_pace !== undefined ? { follow_up_pace: body.follow_up_pace } : {}),
+    });
     if (!stranger) throw errors.notFound("Stranger");
   }
   if (body.status !== undefined) {

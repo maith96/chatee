@@ -91,10 +91,10 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
     refresh();
     // Opening the app: a stranger may have texted (the server decides; at most one a day, never at night).
-    api<{ contacts: ContactView[]; delivered: string | null }>("/strangers/sync", { method: "POST", body: JSON.stringify({ timezone: timezone() }) })
+    api<{ contacts: ContactView[]; delivered: string | null; followed_up?: string | null }>("/strangers/sync", { method: "POST", body: JSON.stringify({ timezone: timezone() }) })
       .then((d) => {
         setContacts(d.contacts);
-        if (d.delivered) refresh();
+        if (d.delivered || d.followed_up) refresh();
       })
       .catch(() => {});
     // Only models whose provider has an API key on the server.

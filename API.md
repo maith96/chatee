@@ -206,8 +206,10 @@ Send `timezone` with your message requests so personas know the user's region.
 Rebuilds the shared news digest now → `{ "status": "refreshed", "items": 45, "feeds": 98 }`.
 
 ### `POST /strangers/sync`
-Call when the app opens: `{ "timezone": "Africa/Nairobi" }` → `{ "delivered": persona_id | null, "contacts": [...] }`.
-A stranger may text the user first (max one a day, never 22:00–07:00 local, not on day one, stops after two unanswered).
+Call when the app opens: `{ "timezone": "Africa/Nairobi" }` → `{ "delivered": persona_id | null, "followed_up": conversation_id | null, "contacts": [...] }`.
+A new stranger may text the user first: max one a day, about 3 a week after 2 are left unanswered in a row, 1 a week after 4
+(a reply resets it); never 22:00–07:00 local, not on day one. Otherwise a stranger the user has written to may **follow up** in
+their chat when it's gone quiet (`followed_up`): one a day at most, once per silence. Refresh the chat list when either is set.
 Each contact: `{ persona: {...summary, is_stranger, images, city}, conversation_id, origin: "dm" | "meet", state, created_at, preview }`.
 Show `state: "request"` ones as **message requests**; hide `ignored`/`blocked` ones' chats. Always label strangers as AI.
 
@@ -220,7 +222,7 @@ Up to 5 a day (`429 limit_reached`); `404 no_strangers` when there's nobody new.
 
 ### `PATCH /strangers/{persona_id}`
 `{ "state": "accepted" | "ignored" | "blocked" }`. Replying in the chat also accepts a request.
-`PATCH /me { "strangers": false }` stops strangers messaging first.
+`PATCH /me { "strangers": false }` stops strangers messaging first, including follow-ups.
 
 ### `DELETE /memories/{id}`
 Forget one memory. → `204`

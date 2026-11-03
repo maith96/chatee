@@ -88,22 +88,23 @@ A WhatsApp-like experience where AI "strangers" DM the user to get to know them 
 - **Chats** list plus **Message requests** for strangers who wrote first, with unread dots and a preview.
 - Replying accepts a request; **Ignore** hides it; **Block** stops the stranger for good.
 - **"Meet someone new"** button to start a chat with a random stranger.
-- **Frequency (decided):** at most **one new stranger per day**, and none after the user ignores **2 in a row**. No messages during the user's night (timezone).
+- **Frequency (decided, updated 2026-11-03):** at most **one new stranger per day**. When they're ignored, slow down rather than stop: about **3 a week** after 2 unanswered in a row, **1 a week** after 4; any reply resets it. No messages during the user's night (timezone).
+- **Different opener strategies when ignored:** the next stranger opens in a style the user hasn't ignored yet. The stats page compares opening styles, and each opener message records its style and question topic (`messages.variant = opener:<style>:<topic>`).
 - A strangers on/off setting.
 - First version: messages "arrive" when the user opens the app (like check-ins), no scheduler.
 - ✅ **Openers** are a normal hi plus one easy question, never a "bit" (a statement about their day, an observation, a joke, the news). Users found the specific ones scripted and cringe.
 - ✅ **Opening styles:** each stranger has one (shy, dry, warm, upbeat, local greeting, "what I'm up to"), set by the drafting model and changeable in the Studio, plus a random question topic per message, so strangers don't all say hi the same way.
 
-### Follow-ups (planned, next)
+### Follow-ups ✅
 
-Strangers currently never text again after the first message. Plan:
+Shipped (decided 2026-11-03: one follow-up a day is enough):
 - Only to strangers the user has replied to. Never to requests, ignored or blocked ones.
 - **Personality-driven pace:** each stranger has a follow-up pace (eager about 1 day, steady about 2-3 days, reserved about 4-5 days), chosen by the drafting model and editable in the Studio.
 - **What they bring:** a callback to something the user said (memories), something from their own week, or a news item they'd care about. Same rules as check-ins: never guilt-trip, never mention the silence.
-- **Backing off:** one unanswered follow-up, then nothing until the user replies. After a few weeks of silence, they stop.
+- **Backing off:** one unanswered follow-up, then nothing until the user replies. Not if the user has been silent in that chat for over 3 weeks.
 - **Caps:** at most one stranger follow-up per day across all strangers, never at night, and on top of the one-new-stranger-a-day rule.
 - **Delivery:** first version arrives when the user opens the app (like check-ins); later, timed with push notifications (Check-ins Phase B).
-- **Measured:** follow-up reply rate per stranger and per pace on the leaderboard.
+- **Later:** follow-up reply rate per stranger and per pace on the leaderboard (needs a SQL function).
 
 ### Guardrails
 
