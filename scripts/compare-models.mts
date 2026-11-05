@@ -8,7 +8,7 @@
 // Needs NVIDIA_API_KEY (and GOOGLE_GENERATIVE_AI_API_KEY for Gemini models) in .env.local.
 // The eval paces itself to stay under NVIDIA's shared rate limit, so a full run takes a while.
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isModelId } from "../src/lib/models";
 
@@ -35,19 +35,20 @@ type Summary = {
   medianReplyMs: number;
 };
 
+mkdirSync(REPORTS, { recursive: true });
 const reportFiles = () => new Set(readdirSync(REPORTS, { withFileTypes: true }).filter((f) => f.name.endsWith(".json")).map((f) => f.name));
 const rows: { model: string; s: Summary }[] = [];
 
 for (const model of models) {
   console.log(`\n=== ${model} ===`);
-  let before: Set<string>;
-  try { before = reportFiles(); } catch { before = new Set(); }
-  const res = spawnSync("npx", ["tsx", "scripts/eval-personas.mts", ...personas, "--model", model, "--runs", runs, "--label", `compare ${model}`], {
+  const before = reportFiles();
+  // Run the eval with this same Node + tsx loader (no npx), so it works on Windows, macOS and Linux.
+  const res = spawnSync(process.execPath, ["--import", "tsx", "scripts/eval-personas.mts", ...personas, "--model", model, "--runs", runs, "--label", `compare ${model}`], {
     cwd: ROOT,
     stdio: "inherit",
   });
   if (res.status !== 0) {
-    console.error(`Eval for ${model} failed (exit ${res.status}); skipping.`);
+    console.error(`Eval for ${model} failed (${res.error?.message ?? `exit ${res.status}`}); skipping.`);
     continue;
   }
   const fresh = [...reportFiles()].filter((f) => !before.has(f)).sort().pop();
