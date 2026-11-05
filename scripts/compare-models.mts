@@ -1,8 +1,8 @@
 // Compares chat models on the same persona eval and prints one table.
 // Runs `scripts/eval-personas.mts` once per model, then reads each report it writes.
 //
-//   npm run compare                                        # Juno, Miles, Cole × current default vs Kimi
-//   npm run compare -- --models nova-smart,nova-kimi       # pick models
+//   npm run compare                                        # Juno, Miles, Cole × the three Nova models
+//   npm run compare -- --models nova-smart,terra-fast      # pick models
 //   npm run compare -- --personas juno --runs 2            # pick personas, repeat each scenario
 //
 // Needs NVIDIA_API_KEY (and GOOGLE_GENERATIVE_AI_API_KEY for Gemini models) in .env.local.
@@ -17,7 +17,7 @@ const REPORTS = join(ROOT, "evals/reports");
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 
-const models = opt("--models", "nova-fast,nova-smart,nova-kimi,nova-kimi-pro").split(",").filter(Boolean);
+const models = opt("--models", "nova-fast,nova-smart,nova-deep").split(",").filter(Boolean);
 const personas = opt("--personas", "juno,miles,cole").split(",").filter(Boolean);
 const runs = opt("--runs", "1");
 const unknown = models.filter((m) => !isModelId(m));

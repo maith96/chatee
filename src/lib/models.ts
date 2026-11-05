@@ -29,22 +29,6 @@ export const MODELS = [
     provider: "nvidia",
     providerModel: "minimaxai/minimax-m3.1-flash",
   },
-  // Moonshot AI's open Kimi models, hosted on NVIDIA NIM. On trial: not the default for any character.
-  // Speeds not measured yet: run `npm run compare` and update these descriptions with real numbers.
-  {
-    id: "nova-kimi",
-    name: "Nova Kimi",
-    description: "Moonshot Kimi K3, hosted by NVIDIA. Strong writer, large model (speed not measured yet).",
-    provider: "nvidia",
-    providerModel: "moonshotai/kimi-k3",
-  },
-  {
-    id: "nova-kimi-pro",
-    name: "Nova Kimi Pro",
-    description: "Moonshot Kimi K3.1 Pro, hosted by NVIDIA. Largest Kimi (speed not measured yet).",
-    provider: "nvidia",
-    providerModel: "moonshotai/kimi-k3.1-pro",
-  },
   // Google Gemini (free tier). Needs GOOGLE_GENERATIVE_AI_API_KEY.
   // "-latest" aliases always point at Google's current model, so they don't go stale.
   {
