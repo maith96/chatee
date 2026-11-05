@@ -43,6 +43,8 @@ const FALLBACK: Record<ModelId, ModelId> = {
   "nova-fast": "terra-lite",
   "nova-smart": "terra-fast",
   "nova-deep": "terra-pro",
+  "nova-kimi": "terra-fast",
+  "nova-kimi-pro": "terra-pro",
   "terra-fast": "nova-smart",
   "terra-lite": "nova-fast",
   "terra-pro": "nova-deep",
