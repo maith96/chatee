@@ -17,7 +17,7 @@ The beta can't start until these are done. All of them come from the handoff.
 |---|------|----------------------|------|
 | 1 | Move Gemini off the free tier, with a spending cap | The privacy policy says providers don't train on chats, and that has to be true from the first user's first message | ~$3–5 (already in the $20) |
 | 2 | Re-run `supabase/schema.sql` on production | Accounts, memory and deletion must work for real users | $0 |
-| 3 | Buy `sasamigo.com` and point it at Vercel | Every invite, clip and bio links here | ~$11 (already in the $20) |
+| 3 | ~~Buy the domain~~ ✅ bought on Cloudflare (5 Nov). Still to do: add it in Vercel → Domains, add the DNS records Vercel shows (DNS only, grey cloud), and add it to Supabase Auth → URL Configuration (Site URL + redirect `https://sasamigo.com/auth/callback`) | Every invite, clip and bio links here. Sign-up emails and Google sign-in fail on the new domain until Supabase allows it | ~$11 (spent) |
 | 4 | Set up `hello@sasamigo.com` (Cloudflare Email Routing) | Feedback, deletion requests and the privacy contact all use it | $0 |
 | 5 | Decide how the beta stays "closed" (see below) | Right now anyone with the link can sign up | $0 |
 | 6 | Test the crisis flow and Kenyan helplines end to end on a phone | Real users, real risk | $0 |
