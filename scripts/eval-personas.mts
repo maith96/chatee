@@ -254,7 +254,7 @@ async function runScenario(p: Persona, s: Scenario, run: number): Promise<Result
     }
     return { persona: p.slug, scenario: s.id, run, model: model.id, turns, judge: verdict };
   } catch (err) {
-    return { persona: p.slug, scenario: s.id, run, model: model.id, turns, judge: null, error: String(err) };
+    return { persona: p.slug, scenario: s.id, run, model: model.id, turns, judge: null, error: describeError(err) };
   }
 }
 
@@ -328,6 +328,14 @@ writeFileSync(join(outDir, `${stamp}.json`), JSON.stringify({ label, summary, re
 writeFileSync(join(outDir, `${stamp}.html`), renderHtml(label, summary, results));
 writeFileSync(join(outDir, "latest.html"), renderHtml(label, summary, results));
 console.log(`\nReport: evals/reports/${stamp}.html (also evals/reports/latest.html)`);
+
+/** The useful part of an API error: HTTP status, message and the provider's reply (String(err) is often just the name). */
+function describeError(err: unknown): string {
+  const e = ((err as { lastError?: unknown })?.lastError ?? err) as { statusCode?: number; message?: string; responseBody?: string; url?: string };
+  return [e.statusCode && `HTTP ${e.statusCode}`, e.message, e.responseBody && `reply: ${e.responseBody.slice(0, 300)}`, e.url && `url: ${e.url}`]
+    .filter(Boolean)
+    .join(" · ") || String(err);
+}
 
 function esc(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
