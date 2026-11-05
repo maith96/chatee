@@ -53,7 +53,10 @@ for (const model of models) {
   }
   const fresh = [...reportFiles()].filter((f) => !before.has(f)).sort().pop();
   if (!fresh) continue;
-  const { summary } = JSON.parse(readFileSync(join(REPORTS, fresh), "utf8")) as { summary: Summary[] };
+  const report = JSON.parse(readFileSync(join(REPORTS, fresh), "utf8")) as { summary: Summary[]; results: { error?: string }[] };
+  const { summary } = report;
+  const firstError = report.results.find((r) => r.error)?.error;
+  if (firstError) console.error(`First error for ${model}: ${firstError.slice(0, 300)}`);
   for (const s of summary) rows.push({ model, s });
 }
 

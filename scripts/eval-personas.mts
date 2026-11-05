@@ -5,6 +5,7 @@
 //   npm run eval -- elena --runs 2   # one persona, each scenario twice
 //
 // Needs NVIDIA_API_KEY and/or GOOGLE_GENERATIVE_AI_API_KEY in the environment (or .env.local).
+import "./load-env.mts"; // must stay the first import: it sets the API keys before providers.ts reads them
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateText } from "ai";
@@ -15,7 +16,6 @@ import { applyVariant, getExperiment } from "../src/lib/experiments";
 import { resolveModel } from "../src/lib/providers";
 
 const ROOT = join(import.meta.dirname, "..");
-loadEnvFile(join(ROOT, ".env.local"));
 
 // ---------- inputs ----------------------------------------------------------------------------
 
@@ -385,12 +385,4 @@ summary{cursor:pointer}.badge{background:var(--bad);color:#fff;border-radius:10p
 </style></head><body><main><h1>Persona evaluation ${esc(title)}</h1>
 <p class="sub">${new Date().toLocaleString("en-GB")} · ${res.length} conversations · scores are the judge's 1–5 ratings: in character, natural, tone fit, behaviour</p>
 <div class="cards">${cards}</div>${convs}</main></body></html>`;
-}
-
-function loadEnvFile(path: string) {
-  if (!existsSync(path)) return;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-  }
 }
