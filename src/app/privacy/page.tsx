@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { pageMetadata } from "@/lib/seo";
 import { SITE } from "@/lib/site";
 
 // Plain-English privacy policy written for Kenya's Data Protection Act, 2019.
 // Keep it TRUE: if the app starts collecting something new, or you change providers, update this page
 // and SITE.legalUpdated. Have it reviewed by a lawyer or the ODPC's guidance when you can.
 
-export const metadata: Metadata = { title: "Privacy policy · Sasamigo" };
+export const metadata: Metadata = pageMetadata({
+  title: "Privacy policy",
+  description: "How Sasamigo handles your data under Kenya's Data Protection Act, 2019: what we collect, why, and how to see or delete it.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   const email = <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>;

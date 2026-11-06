@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Logo, Wordmark } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
+import { SITE } from "@/lib/site";
 
 const FRIENDS = [
   { slug: "juno", name: "Juno", tagline: "your loudest supporter (and occasional chaos agent)" },
@@ -26,10 +27,49 @@ const PROMISES = [
   "If you’re going through something hard, we always show real helplines.",
 ];
 
+// Structured data for search engines (schema.org). Only true facts: no ratings, reviews or user counts
+// until real ones exist. Check it with https://search.google.com/test/rich-results after deploying.
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE.url}/#org`,
+      name: SITE.company,
+      url: SITE.url,
+      logo: `${SITE.url}/brand/sasamigo-app-icon-512.png`,
+      email: SITE.contactEmail,
+      address: { "@type": "PostalAddress", addressCountry: "KE" },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE.url}/#website`,
+      name: SITE.name,
+      url: SITE.url,
+      inLanguage: "en-KE",
+      publisher: { "@id": `${SITE.url}/#org` },
+    },
+    {
+      "@type": "WebApplication",
+      name: SITE.name,
+      url: SITE.url,
+      description: SITE.description,
+      applicationCategory: "SocialNetworkingApplication",
+      operatingSystem: "Web browser",
+      inLanguage: "en-KE",
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "KES" },
+      audience: { "@type": "PeopleAudience", suggestedMinAge: 18 },
+      publisher: { "@id": `${SITE.url}/#org` },
+    },
+  ],
+};
+
 /** Home page for signed-out visitors. */
 export function Landing({ deleted = false }: { deleted?: boolean }) {
   return (
     <div className="flex min-h-dvh flex-col">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />
       <header className="px-4 py-5">
         <nav className="mx-auto flex max-w-5xl items-center justify-between gap-4" aria-label="Main">
           <Link href="/" className="flex items-center gap-2" aria-label="Sasamigo home">

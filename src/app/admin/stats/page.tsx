@@ -12,7 +12,7 @@ import { RefreshNews } from "./refresh-news";
 import { isOpeningStyle, OPENING_STYLES } from "@/lib/opening-styles";
 import { getLeaderboard, MIN_USERS } from "@/lib/stranger-leaderboard";
 
-export const metadata = { title: "Sasamigo stats" };
+export const metadata = { title: "Stats" };
 
 const RANGES = [7, 30, 90];
 

@@ -39,7 +39,8 @@ async function handle(request: NextRequest) {
   const signedIn = Boolean(data?.claims);
   const path = request.nextUrl.pathname;
   // The landing page (/) shows itself to signed-out visitors; the legal pages are always public.
-  const isPublic = path === "/" || path.startsWith("/login") || path.startsWith("/auth") || path === "/privacy" || path === "/terms";
+  const isPublic =
+    path === "/" || path.startsWith("/login") || path.startsWith("/auth") || path === "/privacy" || path === "/terms" || SEO_FILES.has(path);
 
   if (!signedIn && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -49,6 +50,9 @@ async function handle(request: NextRequest) {
   }
   return response;
 }
+
+// Files search engines and link previews fetch while signed out. Never send these to /login.
+const SEO_FILES = new Set(["/robots.txt", "/sitemap.xml", "/opengraph-image", "/twitter-image", "/manifest.webmanifest"]);
 
 export const config = {
   // Skip API routes, Next internals and static files.

@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { pageMetadata } from "@/lib/seo";
 import { SITE } from "@/lib/site";
 
 // Plain-English terms of service. Keep them true to how the app works, and update SITE.legalUpdated
 // whenever you change them. Have them reviewed by a lawyer when you can.
 
-export const metadata: Metadata = { title: "Terms · Sasamigo" };
+export const metadata: Metadata = pageMetadata({
+  title: "Terms of service",
+  description: "The terms for using Sasamigo, the AI friends app by Leinalok Labs in Kenya. For adults 18+.",
+  path: "/terms",
+});
 
 export default function TermsPage() {
   const email = <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>;

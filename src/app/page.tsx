@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { AgeGate } from "@/components/age-gate";
@@ -6,6 +8,9 @@ import { Landing } from "@/components/landing";
 import { isAdultConfirmed } from "@/lib/age";
 import { isAdmin } from "@/lib/feedback";
 import { createClient } from "@/lib/supabase/server";
+
+// Title comes from the root layout; this page is the canonical "/".
+export const metadata: Metadata = pageMetadata({ path: "/" });
 
 export default function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   return (
