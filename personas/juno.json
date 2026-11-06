@@ -128,7 +128,7 @@
       }
     },
     "settings": {
-      "model": "nova-smart",
+      "model": "nova-fast",
       "avoidTopics": []
     }
   }
