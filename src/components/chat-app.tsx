@@ -60,6 +60,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
+  const [personasLoaded, setPersonasLoaded] = useState(false);
   // For a new chat: undefined = still choosing, null = plain assistant, otherwise a persona.
   const [newChatPersona, setNewChatPersona] = useState<PersonaSummary | null | undefined>(undefined);
   const [showMemory, setShowMemory] = useState(false);
@@ -107,7 +108,8 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
       .catch(() => {});
     api<{ personas: PersonaSummary[] }>("/personas")
       .then((data) => setPersonas(data.personas))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPersonasLoaded(true));
   }, [refresh]);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
@@ -340,7 +342,7 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
           </div>
         )}
         {choosing ? (
-          <PersonaPicker personas={personas} onChoose={choosePersona} />
+          <PersonaPicker personas={personas} loading={!personasLoaded} onChoose={choosePersona} />
         ) : (
         <ChatView
           key={activeId ?? `new-${newChatPersona?.id ?? "assistant"}`}
@@ -364,13 +366,23 @@ export default function ChatApp({ email, admin = false }: { email: string; admin
   );
 }
 
-function PersonaPicker({ personas, onChoose }: { personas: PersonaSummary[]; onChoose: (p: PersonaSummary | null) => void }) {
+function PersonaPicker({ personas, loading, onChoose }: { personas: PersonaSummary[]; loading: boolean; onChoose: (p: PersonaSummary | null) => void }) {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-10 md:px-8">
       <div className="mx-auto max-w-3xl">
         <h2 className="text-center text-2xl font-semibold">Who do you want to talk to?</h2>
         <p className="mt-2 text-center text-muted">Pick a character, or chat with the plain assistant.</p>
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          {loading && [0, 1, 2].map((i) => (
+            <div key={i} aria-hidden className="flex animate-pulse items-start gap-4 rounded-3xl border border-border bg-surface p-4">
+              <div className="h-24 w-24 shrink-0 rounded-full bg-border" />
+              <div className="min-w-0 flex-1 space-y-2 pt-1">
+                <div className="h-5 w-1/3 rounded bg-border" />
+                <div className="h-3.5 w-1/2 rounded bg-border" />
+                <div className="h-3.5 w-full rounded bg-border" />
+              </div>
+            </div>
+          ))}
           {personas.map((p) => (
             <button key={p.id} onClick={() => onChoose(p)}
               className="flex items-start gap-4 rounded-3xl border border-border bg-surface p-4 text-left transition hover:border-accent hover:shadow-sm">
@@ -385,14 +397,14 @@ function PersonaPicker({ personas, onChoose }: { personas: PersonaSummary[]; onC
               </div>
             </button>
           ))}
-          <button onClick={() => onChoose(null)}
+          {!loading && <button onClick={() => onChoose(null)}
             className="flex items-center gap-4 rounded-3xl border border-dashed border-border p-4 text-left hover:border-accent">
             <Avatar persona={null} size="lg" />
             <div>
               <div className="text-lg font-semibold">Assistant</div>
               <div className="text-sm text-muted">Helpful answers, no character.</div>
             </div>
-          </button>
+          </button>}
         </div>
       </div>
     </div>
